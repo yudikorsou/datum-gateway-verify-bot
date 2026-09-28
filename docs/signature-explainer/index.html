@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Prove you own this address</title>
+<style>
+  :root {
+    --bg: #0c1118;
+    --ink: #f4f7fb;
+    --muted: #9aa6b5;
+    --gold: #e2a325;
+    --discord: #5865f2;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; background: var(--bg); color: var(--ink); font-family: "SF Pro Text", "Segoe UI", sans-serif; }
+  #stage { position: relative; width: 1920px; height: 1080px; }
+  header { position: absolute; top: 36px; left: 64px; right: 64px; display: flex; justify-content: space-between; align-items: flex-end; z-index: 5; }
+  .brand { font-size: 18px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--gold); font-weight: 700; }
+  #stepLabel { font-size: 28px; font-weight: 650; }
+  #viewport { position: absolute; inset: 120px 64px 150px; }
+  .view { position: absolute; inset: 0; opacity: 0; transform: translateY(16px); }
+  .view.on { opacity: 1; transform: none; }
+  footer { position: absolute; left: 64px; right: 64px; bottom: 36px; display: grid; gap: 14px; z-index: 5; }
+  #caption { min-height: 64px; font-size: 30px; line-height: 1.35; font-weight: 600; }
+  #rail { display: flex; gap: 10px; }
+  .rail-item { height: 8px; flex: 1; border-radius: 99px; background: #243041; overflow: hidden; }
+  .rail-item > span { display: block; height: 100%; width: 0; background: var(--gold); }
+  #cursor { position: absolute; width: 28px; height: 28px; z-index: 20; pointer-events: none; filter: drop-shadow(0 2px 2px rgba(0,0,0,.45)); transition: left .35s ease, top .35s ease; }
+  .click { position: absolute; width: 18px; height: 18px; margin: -9px 0 0 6px; border: 3px solid white; border-radius: 50%; opacity: 0; }
+  .click.on { animation: ping .45s ease-out; }
+  @keyframes ping { from { opacity: 1; transform: scale(.4); } to { opacity: 0; transform: scale(1.8); } }
+
+  .discord { height: 100%; border-radius: 16px; background: #313338; display: grid; grid-template-columns: 280px 1fr; overflow: hidden; box-shadow: 0 30px 80px rgba(0,0,0,.35); }
+  .d-side { background: #2b2d31; padding: 22px 16px; }
+  .d-server { color: #fff; font-weight: 700; margin-bottom: 18px; }
+  .d-chan { background: #3f4248; border-radius: 6px; padding: 8px 10px; color: #fff; }
+  .d-main { padding: 28px 36px; }
+  .ephemeral { color: #b5bac1; font-size: 14px; margin-bottom: 14px; }
+  .msg { display: flex; gap: 14px; }
+  .avatar { width: 46px; height: 46px; border-radius: 50%; background: #e2a325; color: #1a1406; font-weight: 800; display: grid; place-items: center; }
+  .who { font-weight: 700; } .who span { color: #949ba4; font-weight: 500; font-size: 13px; margin-left: 8px; }
+  .embed { margin-top: 10px; background: #2b2d31; border-left: 4px solid var(--gold); border-radius: 4px; padding: 16px 18px; max-width: 920px; }
+  .embed h2 { margin: 0 0 10px; font-size: 20px; }
+  .meta { color: #dbdee1; margin: 4px 0; }
+  .meta b { color: #fff; }
+  pre.msgtext { margin: 12px 0 0; background: #1e1f22; color: #f2f3f5; padding: 14px 16px; border-radius: 8px; font-family: ui-monospace, Menlo, monospace; font-size: 16px; line-height: 1.45; white-space: pre-wrap; }
+  .hl { outline: 2px solid var(--gold); outline-offset: 4px; border-radius: 8px; }
+  .btn { display: inline-block; margin-top: 14px; background: var(--discord); color: white; border-radius: 6px; padding: 8px 14px; font-weight: 650; }
+  .btn.press { transform: translateY(1px); filter: brightness(1.15); }
+
+  .window { height: 100%; border-radius: 14px; overflow: hidden; box-shadow: 0 30px 80px rgba(0,0,0,.35); display: flex; flex-direction: column; position: relative; }
+  .titlebar { height: 48px; display: flex; align-items: center; gap: 8px; padding: 0 16px; font-weight: 650; }
+  .dots { display: flex; gap: 7px; margin-right: 10px; }
+  .dots i { width: 12px; height: 12px; border-radius: 50%; display: block; }
+  .dots i:nth-child(1) { background: #ff5f57; } .dots i:nth-child(2) { background: #febc2e; } .dots i:nth-child(3) { background: #28c840; }
+  .menu { display: flex; gap: 18px; font-weight: 600; font-size: 15px; position: relative; }
+  .menu .open { background: rgba(255,255,255,.12); border-radius: 6px; padding: 4px 8px; margin: -4px -8px; }
+  .dropdown { position: absolute; top: 34px; min-width: 240px; border-radius: 8px; padding: 6px; box-shadow: 0 16px 40px rgba(0,0,0,.35); display: none; z-index: 4; }
+  .dropdown.show { display: block; }
+  .dropdown div { padding: 8px 10px; border-radius: 6px; }
+  .dropdown div.hot { background: #e2a325; color: #1b1404; }
+  .appbody { flex: 1; position: relative; }
+  .dim { position: absolute; inset: 0; background: rgba(0,0,0,.45); opacity: 0; }
+  .dim.on { opacity: 1; }
+
+  .shrike { background: #1b1d21; color: #eee; }
+  .shrike .titlebar { background: #141518; }
+  .shrike .dropdown { background: #2a2d33; left: 168px; }
+  .wallet-fake { padding: 28px 32px; color: #c8cdd4; }
+  .wallet-fake h3 { margin: 0 0 8px; color: white; }
+  .dialog { position: absolute; left: 50%; top: 46%; transform: translate(-50%, -46%) scale(.96); width: 760px; background: #2a2d33; border: 1px solid #3c414b; border-radius: 12px; padding: 22px 22px 16px; opacity: 0; }
+  .dialog.on { opacity: 1; transform: translate(-50%, -46%) scale(1); }
+  .dialog h3 { margin: 0 0 14px; }
+  label { display: block; font-size: 13px; color: #b7bec8; margin: 10px 0 6px; }
+  input, textarea { width: 100%; border: 1px solid #4a5160; background: #1b1d21; color: #f4f7fb; border-radius: 6px; padding: 8px 10px; font-family: ui-monospace, Menlo, monospace; font-size: 14px; }
+  textarea { min-height: 92px; resize: none; }
+  textarea.sig { min-height: 64px; }
+  .formats { display: flex; border: 1px solid #4a5160; border-radius: 8px; overflow: hidden; }
+  .formats span { flex: 1; text-align: center; padding: 8px 6px; font-size: 13px; color: #d5dbe3; }
+  .formats span.sel { background: #e2a325; color: #1b1404; font-weight: 700; }
+  .buttons { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+  .buttons button, .qt button { border: 1px solid #5a6270; background: #3a3f49; color: white; border-radius: 6px; padding: 8px 12px; font-weight: 650; }
+  .buttons button.primary, button.primary { background: #e2a325; color: #1b1404; border-color: #e2a325; }
+  button.down { filter: brightness(1.2); transform: translateY(1px); }
+
+  .core { background: #d9dde3; color: #1c1e22; }
+  .core .titlebar { background: #f7f8fa; border-bottom: 1px solid #c5cad1; }
+  .core .menu .open { background: #d7ebff; }
+  .core .dropdown { background: white; border: 1px solid #c5cad1; left: 78px; color: #1c1e22; }
+  .core .dropdown div.hot { background: #0a63c8; color: white; }
+  .core-dialog { position: absolute; left: 50%; top: 48%; transform: translate(-50%, -50%); width: 720px; background: #f3f4f6; border: 1px solid #b7bdc6; border-radius: 8px; opacity: 0; }
+  .core-dialog.on { opacity: 1; }
+  .core-dialog header { position: static; padding: 10px 14px; background: #e7e9ed; border-bottom: 1px solid #d0d4da; font-weight: 700; display: block; }
+  .tabs { display: flex; gap: 0; padding: 0 14px; background: #e7e9ed; }
+  .tabs span { padding: 8px 14px; border: 1px solid transparent; border-bottom: none; }
+  .tabs span.on { background: #f3f4f6; border-color: #c5cad1; border-radius: 6px 6px 0 0; }
+  .core-dialog .pad { padding: 8px 16px 16px; }
+  .core input, .core textarea { background: white; color: #1c1e22; border-color: #b7bdc6; }
+  .hint { font-size: 13px; color: #3d4450; margin: 8px 0; }
+
+  .electrum { background: #f4f6f4; color: #1c241c; }
+  .electrum .titlebar { background: #12361f; color: white; }
+  .electrum .dropdown { background: white; border: 1px solid #c9d2c9; color: #1c241c; left: 250px; }
+  .electrum .dropdown div.hot { background: #1f7a3a; color: white; }
+  .e-dialog { position: absolute; width: 680px; left: 50%; top: 48%; transform: translate(-50%, -50%); background: white; border: 1px solid #c5cec5; border-radius: 8px; opacity: 0; }
+  .e-dialog.on { opacity: 1; }
+  .e-dialog h3 { margin: 0; padding: 12px 16px; background: #e7f3ea; border-bottom: 1px solid #d5e4d8; }
+  .e-dialog .pad { padding: 8px 16px 16px; }
+  .electrum input, .electrum textarea { background: white; color: #1c1e22; border-color: #b7c4b7; }
+  .electrum button.primary { background: #1f7a3a; color: white; border-color: #1f7a3a; }
+
+  .modal { width: 560px; margin: 80px auto 0; background: #313338; border-radius: 12px; padding: 20px; box-shadow: 0 24px 60px rgba(0,0,0,.4); }
+  .modal h3 { margin: 0 0 12px; }
+  .modal textarea { min-height: 140px; }
+  .row { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+  .ghost { background: transparent; color: white; border: none; padding: 8px 12px; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <header>
+    <div class="brand">DATUM Gateway verification</div>
+    <div id="stepLabel">Step 1 of 2</div>
+  </header>
+  <div id="viewport">
+    <section class="view" id="view-discord">
+      <div class="discord">
+        <aside class="d-side"><div class="d-server">Your server</div><div class="d-chan"># verify</div></aside>
+        <div class="d-main">
+          <div class="ephemeral">Only you can see this · ephemeral reply</div>
+          <div class="msg">
+            <div class="avatar">D</div>
+            <div>
+              <div class="who">DATUM Gateway <span>Bot</span></div>
+              <div class="embed">
+                <h2>Step 1 of 2 — prove you own this address</h2>
+                <div class="meta" id="addrLine">Address: <b>bc1q2p9fpzvut4qk9agqa9jf4zl3j7s8xwlgmvexgd</b></div>
+                <div class="meta">Type: <b>P2WPKH (native SegWit, bc1q)</b></div>
+                <pre class="msgtext" id="discordText">DATUM Gateway Discord verification
+Discord user: 1069325266746351626
+Address: bc1q2p9fpzvut4qk9agqa9jf4zl3j7s8xwlgmvexgd
+Nonce: 41ff0b3009a4d1a2239bef09e020cd9c
+Issued: 2026-09-28T09:51:19.217Z</pre>
+                <div class="btn" id="discordBtn">Submit signature</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="view" id="view-shrike">
+      <div class="window shrike">
+        <div class="titlebar"><div class="dots"><i></i><i></i><i></i></div><div class="menu"><span>File</span><span>Settings</span><span id="shrikeTools">Tools</span><span>Help</span>
+          <div class="dropdown" id="shrikeMenu"><div>Restart</div><div class="hot" id="shrikeItem">Sign/Verify Message</div><div>Verify download</div></div>
+        </div></div>
+        <div class="appbody">
+          <div class="wallet-fake"><h3>Shrike</h3><div>Wallet · Receive · Addresses</div></div>
+          <div class="dim" id="shrikeDim"></div>
+          <div class="dialog" id="shrikeDialog">
+            <h3>Sign/Verify Message</h3>
+            <label>Address:</label>
+            <input id="shrikeAddr" readonly value="" />
+            <label>Message:</label>
+            <textarea id="shrikeMsg" readonly></textarea>
+            <label>Signature:</label>
+            <textarea class="sig" id="shrikeSig" readonly></textarea>
+            <label>Format:</label>
+            <div class="formats" id="shrikeFormats"><span id="fmtE">Standard (Electrum)</span><span id="fmtT">BIP137 (Trezor)</span><span>BIP322 (Simple)</span></div>
+            <div class="buttons"><button>Sign by QR</button><button class="primary" id="shrikeSign">Sign</button><button>Verify</button><button>Done</button></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="view" id="view-core">
+      <div class="window core">
+        <div class="titlebar"><div class="dots"><i></i><i></i><i></i></div><div class="menu"><span id="coreFile">File</span><span>Settings</span><span>Window</span><span>Help</span>
+          <div class="dropdown" id="coreMenu"><div>Open wallet</div><div class="hot" id="coreItem">Sign message...</div><div>Backup wallet</div></div>
+        </div></div>
+        <div class="appbody">
+          <div class="wallet-fake"><h3>Bitcoin Core</h3><div>Overview · Send · Receive · Transactions</div></div>
+          <div class="dim" id="coreDim"></div>
+          <div class="core-dialog" id="coreDialog">
+            <header>Sign / Verify Message</header>
+            <div class="tabs"><span class="on">Sign Message</span><span>Verify Message</span></div>
+            <div class="pad">
+              <p class="hint">You can sign a message with the Bitcoin address to prove that you own it.</p>
+              <label>Address</label>
+              <input id="coreAddr" readonly />
+              <label>Message</label>
+              <textarea id="coreMsg" readonly></textarea>
+              <label>Signature</label>
+              <textarea class="sig" id="coreSig" readonly></textarea>
+              <div class="buttons"><button class="primary" id="coreSign">Sign Message</button><button>Clear All</button></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="view" id="view-electrum">
+      <div class="window electrum">
+        <div class="titlebar"><div class="dots"><i></i><i></i><i></i></div><div class="menu"><span>File</span><span>Wallet</span><span id="elecTools">Tools</span><span>Help</span>
+          <div class="dropdown" id="elecMenu"><div>Preferences</div><div class="hot" id="elecItem">Sign/verify message</div><div>Load transaction</div></div>
+        </div></div>
+        <div class="appbody">
+          <div class="wallet-fake"><h3>Electrum</h3><div>History · Send · Receive · Addresses</div></div>
+          <div class="dim" id="elecDim"></div>
+          <div class="e-dialog" id="elecDialog">
+            <h3>Sign/verify Message</h3>
+            <div class="pad">
+              <label>Message</label>
+              <textarea id="elecMsg" readonly></textarea>
+              <label>Address</label>
+              <input id="elecAddr" readonly />
+              <label>Signature</label>
+              <textarea class="sig" id="elecSig" readonly></textarea>
+              <div class="buttons"><button class="primary" id="elecSign">Sign</button><button>Verify</button><button>Close</button></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="view" id="view-close">
+      <div class="window" style="background:#161b22;color:#f4f7fb;padding:72px 80px;">
+        <div class="brand">Before you submit</div>
+        <h2 style="font-size:48px;margin:18px 0 28px;">Sign the message, not a transaction</h2>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;font-size:26px;line-height:1.4;">
+          <div style="background:#222a36;border-radius:14px;padding:24px;"><b style="color:#e2a325;">bc1q… and 1… and 3…</b><br>Use the classic Bitcoin signed message. In Shrike, Standard (Electrum) or BIP137.</div>
+          <div style="background:#222a36;border-radius:14px;padding:24px;"><b style="color:#e2a325;">bc1p… Taproot</b><br>Choose BIP322 (Simple), then sign. The bot accepts that signature.</div>
+        </div>
+        <p style="font-size:24px;color:#c5d0dc;margin-top:28px;">Shrike’s SIGHASH_UNIFIED flag is for spending coins. This proof does not use it.</p>
+      </div>
+    </section>
+
+    <section class="view" id="view-submit">
+      <div class="discord" style="display:block;padding:48px 0 0;">
+        <div class="modal">
+          <h3>Wallet signature</h3>
+          <div class="ephemeral">Paste the signature from Shrike, Bitcoin Core, or Electrum.</div>
+          <textarea id="submitSig" readonly></textarea>
+          <div class="row"><button class="ghost">Cancel</button><button class="btn" id="submitBtn" style="margin-top:0">Submit</button></div>
+        </div>
+      </div>
+    </section>
+  </div>
+  <footer>
+    <div id="caption"></div>
+    <div id="rail"></div>
+  </footer>
+  <div id="cursor"><svg viewBox="0 0 24 24" width="28" height="28"><path fill="#fff" stroke="#111" stroke-width="1.2" d="M4 2 L4 20 L9 15 L13 22 L16 20 L12 13 L19 13 Z"/></svg><div class="click" id="ripple"></div></div>
+</div>
+<script>
+const MESSAGE = `DATUM Gateway Discord verification
+Discord user: 1069325266746351626
+Address: bc1q2p9fpzvut4qk9agqa9jf4zl3j7s8xwlgmvexgd
+Nonce: 41ff0b3009a4d1a2239bef09e020cd9c
+Issued: 2026-09-28T09:51:19.217Z`;
+const ADDRESS = "bc1q2p9fpzvut4qk9agqa9jf4zl3j7s8xwlgmvexgd";
+const EXAMPLE_SIG = "EXAMPLE SIGNATURE — paste the one from your wallet";
+
+const $ = (id) => document.getElementById(id);
+const views = ["discord", "shrike", "core", "electrum", "submit", "close"];
+
+function show(id) {
+  for (const name of views) $("view-" + name).classList.toggle("on", name === id);
+}
+
+function cursor(x, y, click) {
+  $("cursor").style.left = x + "px";
+  $("cursor").style.top = y + "px";
+  $("ripple").classList.toggle("on", !!click);
+}
+
+function rail(active, p) {
+  const root = $("rail");
+  const labels = ["Discord", "Shrike", "Bitcoin Core", "Electrum", "Submit", "Format"];
+  root.innerHTML = labels.map((label, i) => {
+    const fill = i < active ? 100 : i === active ? Math.round(p * 100) : 0;
+    return `<div class="rail-item" title="${label}"><span style="width:${fill}%"></span></div>`;
+  }).join("");
+}
+
+function fillWallet(prefix, p) {
+  const msg = $(prefix + "Msg");
+  const addr = $(prefix + "Addr");
+  const sig = $(prefix + "Sig");
+  if (p < 0.42) { msg.value = ""; addr.value = ""; sig.value = ""; return; }
+  msg.value = MESSAGE;
+  addr.value = ADDRESS;
+  sig.value = p > 0.82 ? EXAMPLE_SIG : "";
+}
+
+window.renderAt = function renderAt(t, timing) {
+  const scenes = timing.scenes;
+  let index = scenes.length - 1;
+  for (let i = 0; i < scenes.length; i++) if (t < scenes[i].end) { index = i; break; }
+  const scene = scenes[index];
+  const p = Math.min(1, Math.max(0, (t - scene.start) / (scene.end - scene.start)));
+  $("caption").textContent = scene.caption;
+  $("stepLabel").textContent = scene.title;
+  show(scene.view);
+  rail(index, p);
+
+  $("discordText").classList.toggle("hl", scene.view === "discord" && p > 0.35);
+  $("discordBtn").classList.toggle("press", false);
+  $("shrikeMenu").classList.remove("show");
+  $("shrikeTools").classList.remove("open");
+  $("shrikeDim").classList.remove("on");
+  $("shrikeDialog").classList.remove("on");
+  $("shrikeSign").classList.remove("down");
+  $("fmtE").classList.remove("sel");
+  $("fmtT").classList.remove("sel");
+  $("coreMenu").classList.remove("show");
+  $("coreFile").classList.remove("open");
+  $("coreDim").classList.remove("on");
+  $("coreDialog").classList.remove("on");
+  $("coreSign").classList.remove("down");
+  $("elecMenu").classList.remove("show");
+  $("elecTools").classList.remove("open");
+  $("elecDim").classList.remove("on");
+  $("elecDialog").classList.remove("on");
+  $("elecSign").classList.remove("down");
+  $("submitSig").value = "";
+  $("submitBtn").classList.remove("press");
+
+  if (scene.view === "discord") {
+    cursor(1180, 620, p > 0.72 && p < 0.8);
+  } else if (scene.view === "shrike") {
+    const menu = p > 0.08 && p < 0.28;
+    $("shrikeMenu").classList.toggle("show", menu);
+    $("shrikeTools").classList.toggle("open", menu || p >= 0.28);
+    const dialog = p >= 0.28;
+    $("shrikeDim").classList.toggle("on", dialog);
+    $("shrikeDialog").classList.toggle("on", dialog);
+    if (p >= 0.4) { $("shrikeMsg").value = MESSAGE; $("shrikeAddr").value = ADDRESS; }
+    if (p >= 0.55 && p < 0.7) $("fmtE").classList.add("sel");
+    if (p >= 0.7) $("fmtT").classList.add("sel");
+    $("shrikeSig").value = p >= 0.86 ? EXAMPLE_SIG : "";
+    $("shrikeSign").classList.toggle("down", p >= 0.8 && p < 0.88);
+    if (p < 0.12) cursor(430, 168, false);
+    else if (p < 0.28) cursor(520, 250, p > 0.2 && p < 0.26);
+    else if (p < 0.8) cursor(1288, 760, false);
+    else cursor(1288, 760, p < 0.86);
+  } else if (scene.view === "core") {
+    const menu = p > 0.08 && p < 0.3;
+    $("coreMenu").classList.toggle("show", menu);
+    $("coreFile").classList.toggle("open", menu || p >= 0.3);
+    const dialog = p >= 0.3;
+    $("coreDim").classList.toggle("on", dialog);
+    $("coreDialog").classList.toggle("on", dialog);
+    if (p >= 0.42) { $("coreMsg").value = MESSAGE; $("coreAddr").value = ADDRESS; }
+    $("coreSig").value = p >= 0.84 ? EXAMPLE_SIG : "";
+    $("coreSign").classList.toggle("down", p >= 0.74 && p < 0.84);
+    if (p < 0.16) cursor(250, 168, false);
+    else if (p < 0.3) cursor(360, 250, p > 0.22 && p < 0.28);
+    else cursor(1040, 760, p > 0.74 && p < 0.82);
+  } else if (scene.view === "electrum") {
+    const menu = p > 0.08 && p < 0.3;
+    $("elecMenu").classList.toggle("show", menu);
+    $("elecTools").classList.toggle("open", menu || p >= 0.3);
+    const dialog = p >= 0.3;
+    $("elecDim").classList.toggle("on", dialog);
+    $("elecDialog").classList.toggle("on", dialog);
+    if (p >= 0.42) { $("elecMsg").value = MESSAGE; $("elecAddr").value = ADDRESS; }
+    $("elecSig").value = p >= 0.84 ? EXAMPLE_SIG : "";
+    $("elecSign").classList.toggle("down", p >= 0.74 && p < 0.84);
+    if (p < 0.16) cursor(500, 168, false);
+    else if (p < 0.3) cursor(620, 250, p > 0.22 && p < 0.28);
+    else cursor(1048, 730, p > 0.74 && p < 0.82);
+  } else if (scene.view === "submit") {
+    $("submitSig").value = p > 0.25 ? EXAMPLE_SIG : "";
+    $("submitBtn").classList.toggle("press", p > 0.72);
+    cursor(1110, 560, p > 0.72 && p < 0.82);
+  } else {
+    cursor(960, 540, false);
+  }
+};
+
+const FALLBACK = {
+  total: 90,
+  scenes: [
+    { view: "discord", title: "Step 1 of 2", caption: "The bot sent a private message. Sign this exact text.", start: 0, end: 16 },
+    { view: "shrike", title: "Shrike", caption: "Tools → Sign/Verify Message. Paste the message, match the address, then Sign.", start: 16, end: 40 },
+    { view: "core", title: "Bitcoin Core", caption: "File → Sign message. Paste the address and the message, then Sign Message.", start: 40, end: 56 },
+    { view: "electrum", title: "Electrum", caption: "Tools → Sign/verify message. Paste the message, enter the address, then Sign.", start: 56, end: 72 },
+    { view: "submit", title: "Submit signature", caption: "Back in Discord, click Submit signature and paste the signature from your wallet.", start: 72, end: 86 },
+    { view: "close", title: "Which signature format", caption: "bc1q uses a classic signed message. bc1p Taproot uses BIP322. SIGHASH_UNIFIED is not this step.", start: 86, end: 100 }
+  ]
+};
+</script>
+</body>
+</html>

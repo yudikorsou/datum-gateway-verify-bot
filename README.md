@@ -57,7 +57,7 @@ The bot replies ephemerally, so the signature is not posted in the channel.
 ## Member flow
 
 1. Run `/verify` and enter the payout address. Do not include a `.worker` suffix.
-2. Sign the exact message the bot shows.
+2. Sign the exact message the bot shows. [Watch the explainer](docs/signature-explainer/prove-your-address.mp4) (Shrike, Bitcoin Core, and Electrum).
    - Shrike or Sparrow: **Tools → Sign/Verify Message**
    - Bitcoin Core: `signmessage "<address>" "<message>"`
    - Electrum: **Tools → Sign/Verify message**
