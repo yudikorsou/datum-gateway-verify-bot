@@ -36,9 +36,9 @@ Shrike is a Sparrow wallet that follows Bitcoin’s BLAKE2b proof-of-work change
 
 1. Create an application and a bot at the [Discord Developer Portal](https://discord.com/developers/applications).
 2. Under **Bot → Privileged Gateway Intents**, leave the privileged intents off. The bot changes roles with the HTTP API, so it does not need the members intent.
-3. Invite the bot with scopes `bot` and `applications.commands`, and permission **Manage Roles**. Replace the client id in this link:
+3. Invite the bot with scopes `bot` and `applications.commands`, and permission **Manage Roles**. Replace `YOUR_CLIENT_ID` with the numeric application id, then open this link. `integration_type=0` means “add it to a server”; Discord rejects the invite without it.
 
-   `https://discord.com/oauth2/authorize?client_id=YOUR_CLIENT_ID&scope=bot%20applications.commands&permissions=268435456`
+   `https://discord.com/oauth2/authorize?client_id=YOUR_CLIENT_ID&permissions=268435456&integration_type=0&scope=bot+applications.commands`
 4. Create the miner role. In the server role list, drag the bot’s role **above** that role.
 5. Copy `.env.example` to `.env` and fill in the token, application id, server id, and role id.
 
