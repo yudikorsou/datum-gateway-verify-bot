@@ -49,8 +49,10 @@ function boolEnv(name, fallback) {
 export function readConfig() {
   loadEnvFile()
   return {
-    token: required('TELEGRAM_BOT_TOKEN'),
-    chatId: required('TELEGRAM_CHAT_ID'),
+    token: required('DISCORD_TOKEN'),
+    clientId: required('DISCORD_CLIENT_ID'),
+    guildId: required('DISCORD_GUILD_ID'),
+    roleId: required('VERIFIED_ROLE_ID'),
     scanIntervalHours: numberEnv('SCAN_INTERVAL_HOURS', 24),
     shareMaxAgeHours: numberEnv('SHARE_MAX_AGE_HOURS', 24),
     convoyTreatActiveAsDatum: boolEnv('CONVOY_TREAT_ACTIVE_AS_DATUM', true),

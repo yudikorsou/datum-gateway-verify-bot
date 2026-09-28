@@ -100,10 +100,10 @@ test('CONVOY online workers count only when the DATUM assumption is on', () => {
   assert.equal(evaluateConvoy(parseConvoyWorkers('<p>none</p>'), { treatActiveAsDatum: true }).activeDatum, false)
 })
 
-test('B2Pool share stats never grant access', () => {
+test('B2Pool share stats never grant the role', () => {
   const now = Date.parse('2026-09-28T08:00:00Z')
   const fresh = evaluateB2({ found: true, last_share_at: '2026-09-28T07:30:00Z' }, { maxAgeMs: DAY * 1000, now })
   assert.equal(fresh.ok, true)
   assert.equal(fresh.activeDatum, false)
-  assert.match(fresh.detail, /cannot grant access/)
+  assert.match(fresh.detail, /cannot grant the role/)
 })

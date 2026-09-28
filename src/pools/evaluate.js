@@ -156,7 +156,7 @@ export function evaluateConvoy(parsed, { treatActiveAsDatum }) {
       name,
       ok: true,
       activeDatum: false,
-      detail: 'A worker is active, but CONVOY_TREAT_ACTIVE_AS_DATUM is off, so this pool cannot grant access. CONVOY does not print a DATUM flag on the worker table.',
+      detail: 'A worker is active, but CONVOY_TREAT_ACTIVE_AS_DATUM is off, so this pool cannot grant the role. CONVOY does not print a DATUM flag on the worker table.',
     }
   }
   const how = parsed.online ? 'Worker is online' : 'Last worker timestamp is inside the freshness window'
@@ -179,7 +179,7 @@ export function evaluateB2(payload, { maxAgeMs, now = Date.now() }) {
     name,
     ok: true,
     activeDatum: false,
-    detail: `Last share ${payload.last_share_at}. B2Pool publishes miner stats, but not whether the share arrived from a DATUM Gateway or from public stratum, so it cannot grant access.`,
+    detail: `Last share ${payload.last_share_at}. B2Pool publishes miner stats, but not whether the share arrived from a DATUM Gateway or from public stratum, so it cannot grant the role.`,
   }
 }
 
