@@ -1,75 +1,89 @@
-import {
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
-  EmbedBuilder,
-} from 'discord.js'
-
-export function startRow() {
-  return new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId('verify:open-address')
-      .setLabel('Enter your address')
-      .setStyle(ButtonStyle.Primary),
-  )
+export function escapeHtml(value) {
+  return String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
 }
 
-export function signatureRow() {
-  return new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId('verify:open-signature')
-      .setLabel('Submit signature')
-      .setStyle(ButtonStyle.Primary),
-  )
+export function askAddressText() {
+  return [
+    '<b>DATUM Gateway verification</b>',
+    '',
+    'Two checks, in order:',
+    '1. Prove this Telegram account owns a public Bitcoin address.',
+    '2. Show that address is submitting shares through a DATUM Gateway.',
+    '',
+    'Send the payout address. Shrike and other BTCB2 wallets use the same mainnet formats as Bitcoin: <code>1…</code>, <code>3…</code>, <code>bc1q…</code>, or <code>bc1p…</code>. Do not include a <code>.worker</code> suffix.',
+  ].join('\n')
 }
 
-export function challengeEmbed(info, message) {
-  return new EmbedBuilder()
-    .setColor(0xe8a317)
-    .setTitle('Step 1 of 2 — prove you own this address')
-    .setDescription([
-      `Address: \`${info.canonical}\``,
-      `Type: ${info.label}`,
-      '',
-      'Sign this exact text in a wallet that can spend the address:',
-      '```',
-      message,
-      '```',
-      '**Shrike** (it inherits this from Sparrow): Tools → Sign/Verify Message. Paste the text, choose this address, sign, then use **Submit signature**.',
-      '**Bitcoin Core:** `signmessage "<address>" "<message>"`',
-      '**Electrum:** Tools → Sign/Verify message.',
-      '',
-      'Shrike addresses are ordinary mainnet addresses (`1…`, `3…`, `bc1q…`, `bc1p…`), including the ones pools pay on the BLAKE2b chain. This step is a message signature. Shrike’s `SIGHASH_UNIFIED` flag applies when you spend coins, not when you sign this proof.',
-      'Taproot (`bc1p…`) needs a BIP322 signature. Legacy and SegWit can use the classic Bitcoin signed message.',
-    ].join('\n'))
+export function challengeText(info, message) {
+  return [
+    '<b>Step 1 of 2 — prove you own this address</b>',
+    '',
+    `Address: <code>${escapeHtml(info.canonical)}</code>`,
+    `Type: ${escapeHtml(info.label)}`,
+    '',
+    'Sign this exact text in a wallet that can spend the address, then paste the signature here:',
+    `<pre>${escapeHtml(message)}</pre>`,
+    '<b>Shrike</b> (this is the same screen Sparrow has): Tools → Sign/Verify Message. Paste the text, choose this address, sign, and send the signature back.',
+    '<b>Bitcoin Core:</b> <code>signmessage "&lt;address&gt;" "&lt;message&gt;"</code>',
+    '<b>Electrum:</b> Tools → Sign/Verify message.',
+    '',
+    'Shrike addresses are ordinary mainnet addresses, including ones that only exist for the BLAKE2b chain. This step is a message signature. Shrike’s <code>SIGHASH_UNIFIED</code> flag applies when you spend coins, not when you sign this proof.',
+    'Taproot (<code>bc1p…</code>) needs a BIP322 signature. Legacy and SegWit can use the classic Bitcoin signed message. A full signed-message block is accepted as well as the raw base64 signature.',
+    '',
+    'The message expires in 30 minutes.',
+  ].join('\n')
 }
 
-export function resultEmbed({ granted, owned, lines, roleNote }) {
+export function datumKeyboard() {
+  return {
+    inline_keyboard: [[{ text: 'Check DATUM shares', callback_data: 'verify:datum' }]],
+  }
+}
+
+export function ownershipConfirmedText(info) {
+  return [
+    '<b>Step 2 of 2 — DATUM Gateway shares</b>',
+    '',
+    `The signature matches <code>${escapeHtml(info.canonical)}</code>. You own this address.`,
+    '',
+    'Next, the bot checks whether that address is submitting shares through a DATUM Gateway. It looks at CONVOY, OmegaPool, RIPTide, Lazarus Pool, Blockvase, Paperclip Pool, and B2Pool.',
+    '',
+    'Tap the button when you want that check. Public stratum shares do not count.',
+  ].join('\n')
+}
+
+export function scanResultText({ granted, lines, roleNote, inviteLink }) {
   const title = granted
-    ? 'Verified — role assigned'
-    : owned
-      ? 'Address confirmed — no DATUM shares yet'
-      : 'Verification failed'
-  const color = granted ? 0x3ddc97 : owned ? 0xe8a317 : 0xe85d4c
+    ? 'Verified — community access granted'
+    : 'Address confirmed — no DATUM shares yet'
   const intro = granted
     ? 'You proved ownership, and at least one pool shows this address submitting shares through DATUM Gateway.'
-    : owned
-      ? 'The signature matches this address. None of the pools that answered show fresh DATUM Gateway shares, so the role was not assigned.'
-      : 'The signature does not prove ownership, so pools were not checked.'
-  return new EmbedBuilder()
-    .setColor(color)
-    .setTitle(title)
-    .setDescription([intro, roleNote, '', ...lines].filter(Boolean).join('\n'))
+    : 'None of the pools that answered show fresh DATUM Gateway shares, so the community was not opened.'
+  const parts = [`<b>${title}</b>`, '', intro]
+  if (roleNote) parts.push('', escapeHtml(roleNote))
+  if (inviteLink && inviteLink.startsWith('https://')) {
+    parts.push('', `<a href="${escapeHtml(inviteLink)}">Open the one-time invite</a>`)
+  }
+  if (lines?.length) {
+    parts.push('', ...lines.map((line) => escapeHtml(line)))
+  }
+  return parts.join('\n')
 }
 
-export function statusEmbed(miner) {
+export function statusText(miner) {
   let scan = null
   if (miner.lastScanJson) {
     try { scan = JSON.parse(miner.lastScanJson) } catch { scan = null }
   }
   const lines = [
-    `Address: \`${miner.address}\` (${miner.addressType})`,
-    `Role: ${miner.roleGranted ? 'assigned' : 'not assigned'}`,
+    '<b>DATUM verification</b>',
+    '',
+    `Address: <code>${escapeHtml(miner.address)}</code> (${escapeHtml(miner.addressType)})`,
+    `Access: ${miner.roleGranted ? 'granted' : 'not granted'}`,
     `Linked: ${new Date(miner.verifiedAt).toISOString()}`,
   ]
   if (miner.lastScanAt) lines.push(`Last scan: ${new Date(miner.lastScanAt).toISOString()}`)
@@ -77,8 +91,16 @@ export function statusEmbed(miner) {
     lines.push('')
     for (const result of scan.results) {
       const mark = !result.ok ? 'unreachable' : result.activeDatum ? 'DATUM shares' : 'no DATUM shares'
-      lines.push(`**${result.name}** — ${mark}. ${result.detail}`)
+      lines.push(`<b>${escapeHtml(result.name)}</b> — ${mark}. ${escapeHtml(result.detail)}`)
     }
   }
-  return new EmbedBuilder().setColor(0x7aa2f7).setTitle('DATUM verification').setDescription(lines.join('\n'))
+  return lines.join('\n')
+}
+
+export function removedText(address) {
+  return `Community access was removed. <code>${escapeHtml(address)}</code> did not have a fresh DATUM Gateway share on any pool that answered. Send /verify again after shares are flowing.`
+}
+
+export function privateOnlyText() {
+  return 'Open a private chat with this bot and send /verify. Do not post your signature in the community.'
 }

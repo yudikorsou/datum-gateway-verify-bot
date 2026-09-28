@@ -1,10 +1,10 @@
 import { randomBytes } from 'node:crypto'
 
-export function createChallenge({ discordId, address, now = Date.now() }) {
+export function createChallenge({ telegramId, address, now = Date.now() }) {
   const nonce = randomBytes(16).toString('hex')
   const message = [
-    'DATUM Gateway Discord verification',
-    `Discord user: ${discordId}`,
+    'DATUM Gateway Telegram verification',
+    `Telegram user: ${telegramId}`,
     `Address: ${address}`,
     `Nonce: ${nonce}`,
     `Issued: ${new Date(now).toISOString()}`,

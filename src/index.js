@@ -1,11 +1,12 @@
-import { Client, GatewayIntentBits } from 'discord.js'
-import { createInteractionHandler, registerCommands, rescanMiners } from './bot.js'
+import { Bot } from 'grammy'
+import { registerBot } from './bot.js'
 import { readConfig } from './config.js'
 import { openDatabase } from './db.js'
+import { rescanMiners } from './rescan.js'
 
 const config = readConfig()
 const db = openDatabase(config.databasePath)
-const client = new Client({ intents: [GatewayIntentBits.Guilds] })
+const bot = new Bot(config.token)
 
 let scanning = false
 async function scanTick(reason) {
@@ -15,7 +16,7 @@ async function scanTick(reason) {
   }
   scanning = true
   try {
-    await rescanMiners(client, db, config)
+    await rescanMiners(bot.api, db, config)
   } catch (error) {
     console.error(`${reason} scan failed`, error)
   } finally {
@@ -23,19 +24,18 @@ async function scanTick(reason) {
   }
 }
 
-client.once('clientReady', async () => {
-  console.log(`logged in as ${client.user.tag}`)
-  try {
-    await registerCommands(config)
-    console.log(`commands registered in guild ${config.guildId}`)
-  } catch (error) {
-    console.error('command registration failed', error)
-  }
-  const intervalMs = config.scanIntervalHours * 60 * 60 * 1000
-  setTimeout(() => scanTick('startup'), 30_000)
-  setInterval(() => scanTick('scheduled'), intervalMs)
+registerBot(bot, { db, config })
+
+bot.catch((error) => {
+  console.error('telegram update failed', error)
 })
 
-client.on('interactionCreate', createInteractionHandler({ client, db, config }))
-
-await client.login(config.token)
+const intervalMs = config.scanIntervalHours * 60 * 60 * 1000
+bot.start({
+  allowed_updates: ['message', 'callback_query', 'chat_join_request'],
+  onStart: (me) => {
+    console.log(`logged in as @${me.username}`)
+    setTimeout(() => scanTick('startup'), 30_000)
+    setInterval(() => scanTick('scheduled'), intervalMs)
+  },
+})
