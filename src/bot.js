@@ -24,6 +24,7 @@ import {
 import { challengeEmbed, optionsRow, resultEmbed, signatureRow, startRow, statusEmbed } from './present.js'
 import { loadSharedSnapshots, scanAddress, summarizeScan } from './pools/scan.js'
 import { grantRole, isUnknownMember, memberRoleState, revokeRole, roleErrorText } from './roles.js'
+import { explainerFiles } from './explainer.js'
 import { verifyOwnership } from './signature.js'
 import { linkedAddress, verifyEntry } from './verify-step.js'
 
@@ -150,6 +151,7 @@ async function respondPrivately(interaction, payload) {
         content: data.content,
         embeds: data.embeds,
         components: data.components,
+        files: data.files,
       })
       const ack = { content: 'I sent the next step in your DMs.', ...EPHEMERAL }
       if (interaction.deferred || interaction.replied) await interaction.followUp(ack).catch(() => {})
@@ -229,6 +231,32 @@ async function replyWithMenu(interaction, db, config, info, extra = '') {
   })
 }
 
+function challengeReply(info, message, content) {
+  return {
+    content,
+    embeds: [challengeEmbed(info, message)],
+    components: actionRows({ signature: true }),
+    files: explainerFiles(),
+  }
+}
+
+async function sendSignatureHelp(interaction, db) {
+  const challenge = getChallenge(db, interaction.user.id)
+  const info = challenge ? inspectAddress(challenge.address) : null
+  const payload = {
+    content: challenge
+      ? 'The sign popup is open. Watch the video, sign this exact text, then paste the signature in the popup. An older signature will not match.'
+      : 'Watch the video, then paste your signature in the popup.',
+    embeds: info?.ok ? [challengeEmbed(info, challenge.message)] : [],
+    files: explainerFiles(),
+  }
+  try {
+    await interaction.user.send(payload)
+  } catch (error) {
+    console.error('signature help DM failed', error)
+  }
+}
+
 function beginChallenge(db, config, discordId, info) {
   const owner = addressOwner(db, info.canonical)
   if (owner && owner.discordId !== discordId) {
@@ -262,7 +290,10 @@ export function createInteractionHandler({ client, db, config }) {
       }
       if (interaction.isButton()) {
         if (interaction.customId === 'verify:open-address') await interaction.showModal(addressModal())
-        else if (interaction.customId === 'verify:open-signature') await interaction.showModal(signatureModal())
+        else if (interaction.customId === 'verify:open-signature') {
+          await interaction.showModal(signatureModal())
+          await sendSignatureHelp(interaction, db)
+        }
         else if (interaction.customId === 'verify:sign-again') await onSignAgain(interaction, db, config)
         else if (interaction.customId === 'verify:restore') await onRestore(interaction, client, db, config)
         return
@@ -288,13 +319,13 @@ async function replyWithChallenge(interaction, db, config, info) {
   }
   const miner = getMiner(db, interaction.user.id)
   const switching = miner && miner.address !== info.canonical
-  await respondPrivately(interaction, {
-    content: switching
+  await respondPrivately(interaction, challengeReply(
+    started.info,
+    started.message,
+    switching
       ? `This will replace \`${miner.address}\` after you sign. An older signature will not match. Use **Sign again** to stay on the linked wallet, or **Restore role** for that wallet.`
       : 'Sign this new message in Shrike. An older signature will not match. If you already proved this address, use **Restore role** instead of Submit signature.',
-    embeds: [challengeEmbed(started.info, started.message)],
-    components: actionRows({ signature: true }),
-  })
+  ))
 }
 
 async function continueAfterAddress(interaction, client, db, config, info) {
@@ -340,11 +371,11 @@ async function onVerify(interaction, client, db, config) {
   }
   if (step === 'resume-challenge') {
     const info = inspectAddress(challenge.address)
-    await respondPrivately(interaction, {
-      content: 'You already have a message to sign. An older signature will not match. If you already proved this address, use **Restore role** or **Sign again**.',
-      embeds: [challengeEmbed(info, challenge.message)],
-      components: actionRows({ signature: true }),
-    })
+    await respondPrivately(interaction, challengeReply(
+      info,
+      challenge.message,
+      'You already have a message to sign. An older signature will not match. If you already proved this address, use **Restore role** or **Sign again**.',
+    ))
     return
   }
   await interaction.showModal(addressModal())

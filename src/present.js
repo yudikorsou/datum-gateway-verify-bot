@@ -68,6 +68,8 @@ export function challengeEmbed(info, message) {
       `Address: \`${info.canonical}\``,
       `Type: ${info.label}`,
       '',
+      'Watch the attached video, or the private copy the bot sends when you open **Submit signature**.',
+      '',
       'Sign this exact text in a wallet that can spend the address:',
       '```',
       message,

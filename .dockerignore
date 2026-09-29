@@ -1,7 +1,9 @@
 node_modules
 .env
 data
-docs
+docs/**
+!docs/signature-explainer/
+!docs/signature-explainer/prove-your-address.mp4
 .git
 *.log
 .venv

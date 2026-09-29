@@ -10,6 +10,7 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 
 COPY src ./src
+COPY docs/signature-explainer/prove-your-address.mp4 ./assets/prove-your-address.mp4
 
 ENV NODE_ENV=production \
     DATABASE_PATH=/data/bot.sqlite
