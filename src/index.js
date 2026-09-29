@@ -23,7 +23,10 @@ async function scanTick(reason) {
   }
 }
 
-client.once('clientReady', async () => {
+let booted = false
+async function onReady() {
+  if (booted) return
+  booted = true
   console.log(`logged in as ${client.user.tag}`)
   try {
     await registerCommands(config)
@@ -40,8 +43,16 @@ client.once('clientReady', async () => {
   const intervalMs = config.scanIntervalHours * 60 * 60 * 1000
   setTimeout(() => scanTick('startup'), 30_000)
   setInterval(() => scanTick('scheduled'), intervalMs)
-})
+}
 
+client.once('clientReady', onReady)
+client.once('ready', onReady)
 client.on('interactionCreate', createInteractionHandler({ client, db, config }))
 
+try {
+  await registerCommands(config)
+  console.log(`commands registered in guild ${config.guildId}`)
+} catch (error) {
+  console.error('command registration failed', error)
+}
 await client.login(config.token)

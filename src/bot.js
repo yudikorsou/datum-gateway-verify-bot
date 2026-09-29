@@ -21,7 +21,7 @@ import {
   saveChallenge,
   saveMiner,
 } from './db.js'
-import { challengeEmbed, linkedRow, restoreRow, resultEmbed, signatureRow, startRow, statusEmbed } from './present.js'
+import { challengeEmbed, restoreRow, resultEmbed, signatureRow, statusEmbed } from './present.js'
 import { loadSharedSnapshots, scanAddress, summarizeScan } from './pools/scan.js'
 import { grantRole, isUnknownMember, memberRoleState, revokeRole, roleErrorText } from './roles.js'
 import { verifyOwnership } from './signature.js'
@@ -49,7 +49,7 @@ export function botInviteUrl(clientId) {
   return `https://discord.com/oauth2/authorize?${params.toString()}`
 }
 
-export function commandBuilders() {
+function slashCommands() {
   return [
     new SlashCommandBuilder()
       .setName('verify')
@@ -64,21 +64,30 @@ export function commandBuilders() {
     new SlashCommandBuilder()
       .setName('unlink')
       .setDescription('Remove your verification and the miner role'),
-  ].map((command) => ({
-    ...command.toJSON(),
-    integration_types: [0, 1],
-    contexts: [0, 1, 2],
-  }))
+  ]
+}
+
+export function commandBuilders() {
+  return slashCommands().map((command) => command.toJSON())
 }
 
 export async function registerCommands(config) {
   const rest = new REST({ version: '10' }).setToken(config.token)
-  const body = commandBuilders()
+  const guildBody = commandBuilders()
+  const globalBody = guildBody.map((command) => ({
+    ...command,
+    integration_types: [0, 1],
+    contexts: [0, 1, 2],
+  }))
   await rest.put(
     Routes.applicationGuildCommands(config.clientId, config.guildId),
-    { body },
+    { body: guildBody },
   )
-  await rest.put(Routes.applicationCommands(config.clientId), { body })
+  await rest.put(Routes.applicationCommands(config.clientId), { body: globalBody })
+}
+
+function roleHas(role, bit) {
+  return (BigInt(role.permissions) & bit) === bit
 }
 
 export async function ensureGuildPermissions(config) {
@@ -91,25 +100,28 @@ export async function ensureGuildPermissions(config) {
     if (!best || role.position > best.position) return role
     return best
   }, null)
-  const combined = botRoles.reduce((acc, role) => acc | BigInt(role.permissions), BigInt(everyone?.permissions || 0))
-  if (!(combined & USE_APPLICATION_COMMANDS) || !(combined & SEND_MESSAGES)) {
-    throw new Error(`Bot is missing Send Messages or Use Application Commands. Re-invite it: ${botInviteUrl(config.clientId)}`)
+  const capableRole = botRoles.find((role) => roleHas(role, SEND_MESSAGES) && roleHas(role, USE_APPLICATION_COMMANDS))
+  if (highestBotRole && capableRole && highestBotRole.id !== capableRole.id) {
+    console.error(
+      `Move the "${capableRole.name}" role above "${highestBotRole.name}" in Server Settings → Roles, then restart. The higher role only has Manage Roles, so #gateway still blocks the bot.`,
+    )
   }
   const everyonePerms = BigInt(everyone.permissions)
-  if (!(everyonePerms & USE_APPLICATION_COMMANDS)) {
+  if (!(everyonePerms & USE_APPLICATION_COMMANDS) && highestBotRole && roleHas(highestBotRole, USE_APPLICATION_COMMANDS)) {
     await rest.patch(Routes.guildRole(config.guildId, everyone.id), {
       body: { permissions: String(everyonePerms | USE_APPLICATION_COMMANDS) },
     })
     console.log('enabled Use Application Commands for @everyone')
   }
-  if (!highestBotRole) return
+  const overwriteRole = capableRole || highestBotRole
+  if (!overwriteRole) return
   const channels = await rest.get(Routes.guildChannels(config.guildId))
   const allow = String(VIEW_CHANNEL | SEND_MESSAGES | EMBED_LINKS | READ_MESSAGE_HISTORY | USE_APPLICATION_COMMANDS)
   for (const channel of channels) {
     if (channel.type !== 0 && channel.type !== 5) continue
     if (channel.name === 'mods') continue
     try {
-      await rest.put(`/channels/${channel.id}/permissions/${highestBotRole.id}`, {
+      await rest.put(`/channels/${channel.id}/permissions/${overwriteRole.id}`, {
         body: { type: 0, allow, deny: '0' },
       })
     } catch (error) {
@@ -118,8 +130,33 @@ export async function ensureGuildPermissions(config) {
   }
 }
 
-function inGuild(interaction, config) {
-  return interaction.guildId === config.guildId
+function inAllowedPlace(interaction, config) {
+  return !interaction.guildId || interaction.guildId === config.guildId
+}
+
+async function respondPrivately(interaction, payload) {
+  const data = typeof payload === 'string' ? { content: payload } : payload
+  try {
+    if (interaction.deferred || interaction.replied) {
+      await interaction.editReply(data)
+      return
+    }
+    await interaction.reply({ ...data, ...EPHEMERAL })
+  } catch (error) {
+    console.error('channel reply failed; sending DM', error)
+    try {
+      await interaction.user.send({
+        content: data.content,
+        embeds: data.embeds,
+        components: data.components,
+      })
+      const ack = { content: 'I sent the next step in your DMs.', ...EPHEMERAL }
+      if (interaction.deferred || interaction.replied) await interaction.followUp(ack).catch(() => {})
+      else await interaction.reply(ack).catch(() => {})
+    } catch (dmError) {
+      console.error('DM failed', dmError)
+    }
+  }
 }
 
 function addressModal() {
@@ -171,9 +208,9 @@ function beginChallenge(db, config, discordId, info) {
 export function createInteractionHandler({ client, db, config }) {
   return async function onInteraction(interaction) {
     try {
-      if (!inGuild(interaction, config)) {
+      if (!inAllowedPlace(interaction, config)) {
         if (interaction.isRepliable()) {
-          await interaction.reply({ content: 'Verification only runs in the configured server.', ...EPHEMERAL })
+          await respondPrivately(interaction, 'Verification only runs in the configured server, or in a DM with this bot.')
         }
         return
       }
@@ -206,13 +243,13 @@ export function createInteractionHandler({ client, db, config }) {
 async function replyWithChallenge(interaction, db, config, info) {
   const started = beginChallenge(db, config, interaction.user.id, info)
   if (started.error) {
-    await interaction.reply({ content: started.error, ...EPHEMERAL })
+    await respondPrivately(interaction, started.error)
     return
   }
   const miner = getMiner(db, interaction.user.id)
   const sameWallet = miner?.address === info.canonical
   const switching = miner && !sameWallet
-  await interaction.reply({
+  await respondPrivately(interaction, {
     content: sameWallet
       ? 'Sign this new message in Shrike. Restore role works only while this address is still submitting DATUM Gateway shares. To prove a different wallet, choose **Enter a new address**.'
       : switching
@@ -220,7 +257,6 @@ async function replyWithChallenge(interaction, db, config, info) {
         : 'Sign this new message in Shrike. A signature from an older message will not match.',
     embeds: [challengeEmbed(started.info, started.message)],
     components: sameWallet ? [signatureRow(), restoreRow()] : [signatureRow()],
-    ...EPHEMERAL,
   })
 }
 
@@ -229,9 +265,8 @@ async function rejectAddressChangeWhileVerified(interaction, client, db, config,
   if (!miner || miner.address === info.canonical) return false
   const membership = await memberRoleState(client, config, interaction.user.id)
   if (!membership.inServer || !membership.hasRole) return false
-  await interaction.reply({
+  await respondPrivately(interaction, {
     content: `You still have the role for \`${miner.address}\`. Remove that role, wait until it is taken away, or use \`/unlink\` before proving a different wallet.`,
-    ...EPHEMERAL,
   })
   return true
 }
@@ -239,35 +274,12 @@ async function rejectAddressChangeWhileVerified(interaction, client, db, config,
 async function onVerify(interaction, client, db, config) {
   const supplied = interaction.options.getString('address')
   if (!supplied) {
-    const miner = getMiner(db, interaction.user.id)
-    if (miner) {
-      const membership = await memberRoleState(client, config, interaction.user.id)
-      if (!membership.inServer || !membership.hasRole) {
-        const info = inspectAddress(miner.address)
-        if (!info.ok) {
-          await interaction.reply({ content: info.error, ...EPHEMERAL })
-          return
-        }
-        await replyWithChallenge(interaction, db, config, info)
-        return
-      }
-      await interaction.reply({
-        content: `You already have the role for \`${miner.address}\`. Choose **Sign again** only if you want to prove the wallet with a new message.`,
-        components: [linkedRow()],
-        ...EPHEMERAL,
-      })
-      return
-    }
-    await interaction.reply({
-      content: 'Verification has two steps: prove the address is yours, then the bot checks DATUM Gateway pools for fresh shares. Start with the address.',
-      components: [startRow()],
-      ...EPHEMERAL,
-    })
+    await interaction.showModal(addressModal())
     return
   }
   const info = inspectAddress(supplied)
   if (!info.ok) {
-    await interaction.reply({ content: info.error, ...EPHEMERAL })
+    await respondPrivately(interaction, info.error)
     return
   }
   if (await rejectAddressChangeWhileVerified(interaction, client, db, config, info)) return
@@ -277,7 +289,7 @@ async function onVerify(interaction, client, db, config) {
 async function onAddressModal(interaction, client, db, config) {
   const info = inspectAddress(interaction.fields.getTextInputValue('address'))
   if (!info.ok) {
-    await interaction.reply({ content: info.error, ...EPHEMERAL })
+    await respondPrivately(interaction, info.error)
     return
   }
   if (await rejectAddressChangeWhileVerified(interaction, client, db, config, info)) return
@@ -292,18 +304,17 @@ async function onSignAgain(interaction, db, config) {
   }
   const info = inspectAddress(miner.address)
   if (!info.ok) {
-    await interaction.reply({ content: info.error, ...EPHEMERAL })
+    await respondPrivately(interaction, info.error)
     return
   }
   const started = beginChallenge(db, config, interaction.user.id, info)
   if (started.error) {
-    await interaction.reply({ content: started.error, ...EPHEMERAL })
+    await respondPrivately(interaction, started.error)
     return
   }
-  await interaction.reply({
+  await respondPrivately(interaction, {
     embeds: [challengeEmbed(started.info, started.message)],
     components: [signatureRow()],
-    ...EPHEMERAL,
   })
 }
 
@@ -425,10 +436,10 @@ async function onSignatureModal(interaction, client, db, config) {
 async function onStatus(interaction, db) {
   const miner = getMiner(db, interaction.user.id)
   if (!miner) {
-    await interaction.reply({ content: 'You are not verified yet. Use `/verify`.', ...EPHEMERAL })
+    await respondPrivately(interaction, 'You are not verified yet. Use `/verify`.')
     return
   }
-  await interaction.reply({ embeds: [statusEmbed(miner)], ...EPHEMERAL })
+  await respondPrivately(interaction, { embeds: [statusEmbed(miner)] })
 }
 
 async function onUnlink(interaction, client, db, config) {
