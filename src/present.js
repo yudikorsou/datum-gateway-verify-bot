@@ -83,6 +83,20 @@ export function challengeEmbed(info, message) {
     ].join('\n'))
 }
 
+export function restoreResultEmbed({ granted, address, lines, roleNote }) {
+  const title = granted
+    ? 'Role restored — DATUM Gateway shares found'
+    : 'Role not restored — no DATUM Gateway shares'
+  const color = granted ? 0x3ddc97 : 0xe8a317
+  const intro = granted
+    ? `Checked the linked address \`${address}\` on the DATUM Gateway pools. At least one pool shows it still hashing through DATUM, so the role was restored.`
+    : `Checked the linked address \`${address}\` on the DATUM Gateway pools. The role was not restored.`
+  return new EmbedBuilder()
+    .setColor(color)
+    .setTitle(title)
+    .setDescription([intro, roleNote, '', ...lines].filter(Boolean).join('\n'))
+}
+
 export function resultEmbed({ granted, owned, lines, roleNote }) {
   const title = granted
     ? 'Verified — role assigned'

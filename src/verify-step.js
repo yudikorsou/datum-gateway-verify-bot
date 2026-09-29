@@ -13,3 +13,9 @@ export function verifyEntry({ miner, challenge, hasRole, suppliedAddress }) {
 export function linkedAddress(miner, challenge) {
   return miner?.address || challenge?.address || null
 }
+
+export function restoreDecision(scan) {
+  if (scan?.activeDatum) return 'grant'
+  if (scan?.conclusive) return 'deny'
+  return 'retry'
+}

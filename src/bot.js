@@ -21,12 +21,12 @@ import {
   saveChallenge,
   saveMiner,
 } from './db.js'
-import { challengeEmbed, optionsRow, resultEmbed, signatureRow, startRow, statusEmbed } from './present.js'
+import { challengeEmbed, optionsRow, restoreResultEmbed, resultEmbed, signatureRow, startRow, statusEmbed } from './present.js'
 import { loadSharedSnapshots, scanAddress, summarizeScan } from './pools/scan.js'
 import { grantRole, isUnknownMember, memberRoleState, revokeRole, roleErrorText } from './roles.js'
 import { explainerFiles } from './explainer.js'
 import { verifyOwnership } from './signature.js'
-import { linkedAddress, verifyEntry } from './verify-step.js'
+import { linkedAddress, restoreDecision, verifyEntry } from './verify-step.js'
 
 const EPHEMERAL = { flags: MessageFlags.Ephemeral }
 
@@ -222,7 +222,7 @@ async function replyWithMenu(interaction, db, config, info, extra = '') {
     content: [
       extra,
       `Linked wallet: \`${info.canonical}\`. You already proved this address, so you do not need a new signature.`,
-      '**Restore role** if DATUM shares are still flowing.',
+      '**Restore role** checks whether this linked address is still hashing through a DATUM Gateway pool. The role is restored only if a pool still shows DATUM shares.',
       '**Sign again** only if you want a fresh Shrike message.',
       '**Add another wallet** to prove a different address.',
     ].filter(Boolean).join('\n'),
@@ -407,23 +407,14 @@ async function onSignAgain(interaction, db, config) {
 async function onRestore(interaction, client, db, config) {
   await interaction.deferReply(EPHEMERAL)
   const miner = getMiner(db, interaction.user.id)
-  const challenge = getChallenge(db, interaction.user.id)
-  const address = linkedAddress(miner, challenge)
-  if (!address) {
+  if (!miner) {
     await interaction.editReply({
-      content: 'No wallet is selected yet. Use **Add another wallet** or run `/verify`.',
+      content: 'No address is coupled to your Discord account yet. Use **Sign again** or **Add another wallet** first. Restore role only checks the linked address for DATUM Gateway shares.',
       components: actionRows(),
     })
     return
   }
-  const membership = await memberRoleState(client, config, interaction.user.id)
-  if (!miner && !membership.hasRole) {
-    await interaction.editReply({
-      content: 'Prove this address once with **Sign again** before the role can be restored.',
-      components: actionRows(),
-    })
-    return
-  }
+  const address = miner.address
   const owner = addressOwner(db, address)
   if (owner && owner.discordId !== interaction.user.id) {
     await interaction.editReply({
@@ -434,8 +425,9 @@ async function onRestore(interaction, client, db, config) {
   }
   const scan = await scanAddress(address, config)
   const lines = summarizeScan(scan)
-  if (!scan.activeDatum) {
-    if (scan.conclusive) {
+  const decision = restoreDecision(scan)
+  if (decision !== 'grant') {
+    if (decision === 'deny') {
       try {
         await revokeRole(client, config, interaction.user.id)
       } catch (error) {
@@ -444,16 +436,16 @@ async function onRestore(interaction, client, db, config) {
           return
         }
       }
-      if (miner) recordScan(db, interaction.user.id, { roleGranted: false, scannedAt: Date.now(), scan })
+      recordScan(db, interaction.user.id, { roleGranted: false, scannedAt: Date.now(), scan })
     }
     await interaction.editReply({
-      embeds: [resultEmbed({
+      embeds: [restoreResultEmbed({
         granted: false,
-        owned: true,
+        address,
         lines,
-        roleNote: scan.conclusive
-          ? 'Every pool answered. This address is not submitting DATUM Gateway shares, so the role was not restored.'
-          : 'A pool did not answer, so the role was not restored. Try again when that pool is reachable.',
+        roleNote: decision === 'deny'
+          ? 'Every pool answered. This linked address is not hashing through a DATUM Gateway, so the role was not restored.'
+          : 'A pool did not answer, so this check is not treated as a no. The role was not changed. Try again when that pool is reachable.',
       })],
       components: actionRows(),
     })
@@ -463,7 +455,7 @@ async function onRestore(interaction, client, db, config) {
     await grantRole(client, config, interaction.user.id)
   } catch (error) {
     if (isUnknownMember(error)) {
-      if (miner) recordScan(db, interaction.user.id, { roleGranted: false, scannedAt: Date.now(), scan })
+      recordScan(db, interaction.user.id, { roleGranted: false, scannedAt: Date.now(), scan })
       await interaction.editReply({
         content: 'You are not in this server. Rejoin, then run `/verify`.',
         components: actionRows(),
@@ -473,19 +465,14 @@ async function onRestore(interaction, client, db, config) {
     await interaction.editReply({ content: roleErrorText(error), components: actionRows() })
     return
   }
-  const info = inspectAddress(address)
-  saveMiner(db, {
-    discordId: interaction.user.id,
-    address,
-    addressType: info.type,
-    signature: miner?.signature || 'restored',
-    verifiedAt: miner?.verifiedAt || Date.now(),
-    roleGranted: true,
-    lastScanAt: Date.now(),
-    lastScanJson: JSON.stringify(scan),
-  })
+  recordScan(db, interaction.user.id, { roleGranted: true, scannedAt: Date.now(), scan })
   await interaction.editReply({
-    embeds: [resultEmbed({ granted: true, owned: true, lines })],
+    embeds: [restoreResultEmbed({
+      granted: true,
+      address,
+      lines,
+      roleNote: 'The role is restored only while this linked address keeps hashing through DATUM Gateway.',
+    })],
     components: actionRows(),
   })
 }

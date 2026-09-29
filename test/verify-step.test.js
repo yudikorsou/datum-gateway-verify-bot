@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { linkedAddress, verifyEntry } from '../src/verify-step.js'
+import { linkedAddress, restoreDecision, verifyEntry } from '../src/verify-step.js'
 
 test('a linked miner opens the restore menu instead of a new signature', () => {
   assert.equal(verifyEntry({
@@ -49,4 +49,11 @@ test('a new wallet or a first-time user still gets a signature challenge', () =>
 test('linkedAddress prefers the saved miner over a pending challenge', () => {
   assert.equal(linkedAddress({ address: 'bc1qminer' }, { address: 'bc1qchallenge' }), 'bc1qminer')
   assert.equal(linkedAddress(null, { address: 'bc1qchallenge' }), 'bc1qchallenge')
+})
+
+test('restore grants only when the coupled address still has DATUM Gateway shares', () => {
+  assert.equal(restoreDecision({ activeDatum: true, conclusive: true }), 'grant')
+  assert.equal(restoreDecision({ activeDatum: true, conclusive: false }), 'grant')
+  assert.equal(restoreDecision({ activeDatum: false, conclusive: true }), 'deny')
+  assert.equal(restoreDecision({ activeDatum: false, conclusive: false }), 'retry')
 })
