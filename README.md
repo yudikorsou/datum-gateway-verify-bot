@@ -20,7 +20,7 @@ npm start
 
 ## Run 24/7 on Umbrel
 
-The 24-hour DATUM rescan only happens while the process is running. On an Umbrel, run the Discord and Telegram bots as Docker containers so they restart after a reboot. See [deploy/umbrel/README.md](deploy/umbrel/README.md).
+Install **Portainer** from the Umbrel App Store and deploy [deploy/umbrel/docker-compose.portainer.yml](deploy/umbrel/docker-compose.portainer.yml). Full steps: [deploy/umbrel/README.md](deploy/umbrel/README.md).
 
 ## What the pools actually publish
 

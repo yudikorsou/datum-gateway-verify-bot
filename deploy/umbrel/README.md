@@ -1,57 +1,55 @@
-# Run the DATUM Gateway bots 24/7 on Umbrel
+# Run the DATUM Gateway bots 24/7 on Umbrel with Portainer
 
-Both bots are Node processes. They stay up on Umbrel as Docker containers with `restart: unless-stopped`, so they come back after a reboot, a crash, or a Portainer restart. Named volumes keep the SQLite databases.
+Umbrel’s Portainer app has its own Docker engine. Stacks you create there keep running after an Umbrel reboot **as long as Portainer stays installed**. Use named volumes only. Bind mounts are wiped when Portainer updates.
 
-Stop `npm start` on your Mac first. Discord and Telegram only allow one login per bot token.
+Stop `npm start` on your Mac first. Each bot token can only be logged in once.
 
-## 1. Copy the code onto the Umbrel
+## 1. Install Portainer
 
-SSH in (Settings → Advanced → enable SSH, then `ssh umbrel@umbrel.local`).
+1. Open the Umbrel dashboard in a browser (`http://umbrel.local`).
+2. Open the **App Store**.
+3. Install **Portainer**.
+4. Open Portainer from the Umbrel home screen.
+5. Log in with the default user shown on first launch, then set your own password.
 
-```bash
-mkdir -p ~/datum-bots
-cd ~/datum-bots
-git clone https://github.com/yudikorsou/datum-gateway-verify-bot.git
-git clone https://github.com/yudikorsou/datum-gateway-telegram-verify-bot.git
-```
+## 2. Wait for the public images
 
-If `git clone` on the Umbrel is missing Docker files, copy the folders from this Mac. After this commit they are on GitHub.
+GitHub builds these images on every push to `main`:
 
-## 2. Fill secrets
+- `ghcr.io/yudikorsou/datum-gateway-verify-bot:latest`
+- `ghcr.io/yudikorsou/datum-gateway-telegram-verify-bot:latest`
 
-```bash
-cp datum-gateway-verify-bot/deploy/umbrel/.env.example datum-gateway-verify-bot/deploy/umbrel/.env
-nano datum-gateway-verify-bot/deploy/umbrel/.env
-```
+Open each package on GitHub and set visibility to **Public** the first time (Packages → the image → Package settings → Change visibility).
 
-Paste the same Discord and Telegram values you already use locally.
+## 3. Deploy the stack
 
-## 3. Start both bots
+1. In Portainer, open **Live connect** / the local Docker environment.
+2. Go to **Stacks** → **Add stack**.
+3. Name it `datum-gateway-bots`.
+4. Paste the contents of [docker-compose.portainer.yml](docker-compose.portainer.yml).
+5. Under **Environment variables**, add:
 
-Umbrel includes Docker. From the Umbrel:
+| Name | Value |
+| --- | --- |
+| `DISCORD_TOKEN` | Discord bot token |
+| `DISCORD_CLIENT_ID` | Application ID |
+| `DISCORD_GUILD_ID` | Server ID |
+| `VERIFIED_ROLE_ID` | DATUM Verified role ID |
+| `TELEGRAM_BOT_TOKEN` | BotFather token |
+| `TELEGRAM_CHAT_ID` | Group chat id |
 
-```bash
-cd ~/datum-bots/datum-gateway-verify-bot/deploy/umbrel
-docker compose --env-file .env up -d --build
-docker compose logs -f
-```
+Leave `SCAN_INTERVAL_HOURS=24` and `CONVOY_TREAT_ACTIVE_AS_DATUM=true` unless you need to change them.
 
-You should see `logged in as DATUM Gateway#…` and `logged in as @…`. Detach with Ctrl+C; the containers keep running.
+6. Click **Deploy the stack**.
+7. Open **Containers**. Both `discord` and `telegram` should be **running**, with restart policy **unless-stopped**.
+8. Open **Logs** for each. You want `logged in as DATUM Gateway#…` and `logged in as @…`.
 
-Optional: copy the existing Discord database so linked miners stay linked:
+## 4. Keep it running
 
-```bash
-docker compose --env-file .env up -d discord
-docker cp /path/to/bot.sqlite "$(docker compose ps -q discord)":/data/bot.sqlite
-docker compose restart discord
-```
+- Leave the **Portainer** app installed on Umbrel. Stopping or uninstalling Portainer stops these bots and, if you uninstall, can delete their data.
+- Do not add host paths like `/home/umbrel/...` as volumes.
+- After an Umbrel reboot, Portainer starts, then Docker starts the stack again. Each bot rescans about 30 seconds after login, then every 24 hours.
 
-## 4. Portainer (optional)
+## SSH compose (alternative)
 
-Install **Portainer** from the Umbrel App Store. Create a stack, paste `docker-compose.yml`, set the same environment variables, and use **named volumes** only (not host bind mounts). Set the restart policy to `unless-stopped`.
-
-Uninstalling Portainer deletes stacks it created. The SSH `docker compose` method survives Portainer uninstalls.
-
-## 5. After an Umbrel reboot
-
-Do nothing. Docker starts the containers again. Each bot scans linked miners about 30 seconds after login, then every 24 hours.
+If you prefer not to use Portainer, clone both repos and run [docker-compose.yml](docker-compose.yml) with `docker compose --env-file .env up -d --build`. That uses Umbrel’s main Docker engine instead of Portainer’s nested Docker.
