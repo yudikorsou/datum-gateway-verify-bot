@@ -28,6 +28,27 @@ import { verifyOwnership } from './signature.js'
 
 const EPHEMERAL = { flags: MessageFlags.Ephemeral }
 
+const VIEW_CHANNEL = 1n << 10n
+const SEND_MESSAGES = 1n << 11n
+const EMBED_LINKS = 1n << 14n
+const READ_MESSAGE_HISTORY = 1n << 16n
+const MANAGE_ROLES = 1n << 28n
+const USE_APPLICATION_COMMANDS = 1n << 31n
+
+export const BOT_INVITE_PERMISSIONS = String(
+  VIEW_CHANNEL | SEND_MESSAGES | EMBED_LINKS | READ_MESSAGE_HISTORY | MANAGE_ROLES | USE_APPLICATION_COMMANDS,
+)
+
+export function botInviteUrl(clientId) {
+  const params = new URLSearchParams({
+    client_id: clientId,
+    permissions: BOT_INVITE_PERMISSIONS,
+    integration_type: '0',
+    scope: 'bot applications.commands',
+  })
+  return `https://discord.com/oauth2/authorize?${params.toString()}`
+}
+
 export function commandBuilders() {
   return [
     new SlashCommandBuilder()
@@ -43,15 +64,58 @@ export function commandBuilders() {
     new SlashCommandBuilder()
       .setName('unlink')
       .setDescription('Remove your verification and the miner role'),
-  ].map((command) => command.toJSON())
+  ].map((command) => ({
+    ...command.toJSON(),
+    integration_types: [0, 1],
+    contexts: [0, 1, 2],
+  }))
 }
 
 export async function registerCommands(config) {
   const rest = new REST({ version: '10' }).setToken(config.token)
+  const body = commandBuilders()
   await rest.put(
     Routes.applicationGuildCommands(config.clientId, config.guildId),
-    { body: commandBuilders() },
+    { body },
   )
+  await rest.put(Routes.applicationCommands(config.clientId), { body })
+}
+
+export async function ensureGuildPermissions(config) {
+  const rest = new REST({ version: '10' }).setToken(config.token)
+  const roles = await rest.get(Routes.guildRoles(config.guildId))
+  const member = await rest.get(Routes.guildMember(config.guildId, config.clientId))
+  const everyone = roles.find((role) => role.id === config.guildId)
+  const botRoles = roles.filter((role) => member.roles.includes(role.id))
+  const highestBotRole = botRoles.reduce((best, role) => {
+    if (!best || role.position > best.position) return role
+    return best
+  }, null)
+  const combined = botRoles.reduce((acc, role) => acc | BigInt(role.permissions), BigInt(everyone?.permissions || 0))
+  if (!(combined & USE_APPLICATION_COMMANDS) || !(combined & SEND_MESSAGES)) {
+    throw new Error(`Bot is missing Send Messages or Use Application Commands. Re-invite it: ${botInviteUrl(config.clientId)}`)
+  }
+  const everyonePerms = BigInt(everyone.permissions)
+  if (!(everyonePerms & USE_APPLICATION_COMMANDS)) {
+    await rest.patch(Routes.guildRole(config.guildId, everyone.id), {
+      body: { permissions: String(everyonePerms | USE_APPLICATION_COMMANDS) },
+    })
+    console.log('enabled Use Application Commands for @everyone')
+  }
+  if (!highestBotRole) return
+  const channels = await rest.get(Routes.guildChannels(config.guildId))
+  const allow = String(VIEW_CHANNEL | SEND_MESSAGES | EMBED_LINKS | READ_MESSAGE_HISTORY | USE_APPLICATION_COMMANDS)
+  for (const channel of channels) {
+    if (channel.type !== 0 && channel.type !== 5) continue
+    if (channel.name === 'mods') continue
+    try {
+      await rest.put(`/channels/${channel.id}/permissions/${highestBotRole.id}`, {
+        body: { type: 0, allow, deny: '0' },
+      })
+    } catch (error) {
+      console.error(`could not update #${channel.name} permissions`, error)
+    }
+  }
 }
 
 function inGuild(interaction, config) {

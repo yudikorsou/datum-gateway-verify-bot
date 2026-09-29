@@ -1,5 +1,5 @@
 import { Client, GatewayIntentBits } from 'discord.js'
-import { createInteractionHandler, registerCommands, rescanMiners } from './bot.js'
+import { botInviteUrl, createInteractionHandler, ensureGuildPermissions, registerCommands, rescanMiners } from './bot.js'
 import { readConfig } from './config.js'
 import { openDatabase } from './db.js'
 
@@ -30,6 +30,12 @@ client.once('clientReady', async () => {
     console.log(`commands registered in guild ${config.guildId}`)
   } catch (error) {
     console.error('command registration failed', error)
+  }
+  try {
+    await ensureGuildPermissions(config)
+  } catch (error) {
+    console.error('guild permission setup failed', error)
+    console.error(`Re-invite the bot: ${botInviteUrl(config.clientId)}`)
   }
   const intervalMs = config.scanIntervalHours * 60 * 60 * 1000
   setTimeout(() => scanTick('startup'), 30_000)
