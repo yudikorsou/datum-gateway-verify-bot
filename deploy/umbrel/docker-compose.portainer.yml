@@ -4,6 +4,7 @@ services:
     pull_policy: always
     restart: unless-stopped
     init: true
+    network_mode: host
     environment:
       DISCORD_TOKEN: "${DISCORD_TOKEN}"
       DISCORD_CLIENT_ID: "${DISCORD_CLIENT_ID}"
@@ -20,6 +21,7 @@ services:
     pull_policy: always
     restart: unless-stopped
     init: true
+    network_mode: host
     environment:
       TELEGRAM_BOT_TOKEN: "${TELEGRAM_BOT_TOKEN}"
       TELEGRAM_CHAT_ID: "${TELEGRAM_CHAT_ID}"

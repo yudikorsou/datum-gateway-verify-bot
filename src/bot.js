@@ -21,10 +21,11 @@ import {
   saveChallenge,
   saveMiner,
 } from './db.js'
-import { challengeEmbed, restoreRow, resultEmbed, signatureRow, statusEmbed } from './present.js'
+import { challengeEmbed, optionsRow, resultEmbed, signatureRow, startRow, statusEmbed } from './present.js'
 import { loadSharedSnapshots, scanAddress, summarizeScan } from './pools/scan.js'
 import { grantRole, isUnknownMember, memberRoleState, revokeRole, roleErrorText } from './roles.js'
 import { verifyOwnership } from './signature.js'
+import { linkedAddress, verifyEntry } from './verify-step.js'
 
 const EPHEMERAL = { flags: MessageFlags.Ephemeral }
 
@@ -189,6 +190,45 @@ function signatureModal() {
     ))
 }
 
+function actionRows({ signature = false } = {}) {
+  const rows = []
+  if (signature) rows.push(signatureRow())
+  rows.push(optionsRow())
+  return rows
+}
+
+function rememberAddress(db, config, discordId, info) {
+  const owner = addressOwner(db, info.canonical)
+  if (owner && owner.discordId !== discordId) {
+    return { error: 'That address is already linked to another Discord user.' }
+  }
+  const existing = getChallenge(db, discordId)
+  if (existing?.address === info.canonical && existing.expiresAt > Date.now()) {
+    return { info, message: existing.message }
+  }
+  return beginChallenge(db, config, discordId, info)
+}
+
+async function replyWithMenu(interaction, db, config, info, extra = '') {
+  const miner = getMiner(db, interaction.user.id)
+  const remembered = rememberAddress(db, config, interaction.user.id, info)
+  if (remembered.error) {
+    await respondPrivately(interaction, remembered.error)
+    return
+  }
+  await respondPrivately(interaction, {
+    content: [
+      extra,
+      `Linked wallet: \`${info.canonical}\`. You already proved this address, so you do not need a new signature.`,
+      '**Restore role** if DATUM shares are still flowing.',
+      '**Sign again** only if you want a fresh Shrike message.',
+      '**Add another wallet** to prove a different address.',
+    ].filter(Boolean).join('\n'),
+    embeds: miner ? [statusEmbed(miner)] : [],
+    components: actionRows(),
+  })
+}
+
 function beginChallenge(db, config, discordId, info) {
   const owner = addressOwner(db, info.canonical)
   if (owner && owner.discordId !== discordId) {
@@ -247,43 +287,67 @@ async function replyWithChallenge(interaction, db, config, info) {
     return
   }
   const miner = getMiner(db, interaction.user.id)
-  const sameWallet = miner?.address === info.canonical
-  const switching = miner && !sameWallet
+  const switching = miner && miner.address !== info.canonical
   await respondPrivately(interaction, {
-    content: sameWallet
-      ? 'Sign this new message in Shrike. Restore role works only while this address is still submitting DATUM Gateway shares. To prove a different wallet, choose **Enter a new address**.'
-      : switching
-        ? `This will replace \`${miner.address}\` after you sign. Sign this new message in Shrike.`
-        : 'Sign this new message in Shrike. A signature from an older message will not match.',
+    content: switching
+      ? `This will replace \`${miner.address}\` after you sign. An older signature will not match. Use **Sign again** to stay on the linked wallet, or **Restore role** for that wallet.`
+      : 'Sign this new message in Shrike. An older signature will not match. If you already proved this address, use **Restore role** instead of Submit signature.',
     embeds: [challengeEmbed(started.info, started.message)],
-    components: sameWallet ? [signatureRow(), restoreRow()] : [signatureRow()],
+    components: actionRows({ signature: true }),
   })
 }
 
-async function rejectAddressChangeWhileVerified(interaction, client, db, config, info) {
+async function continueAfterAddress(interaction, client, db, config, info) {
   const miner = getMiner(db, interaction.user.id)
-  if (!miner || miner.address === info.canonical) return false
   const membership = await memberRoleState(client, config, interaction.user.id)
-  if (!membership.inServer || !membership.hasRole) return false
-  await respondPrivately(interaction, {
-    content: `You still have the role for \`${miner.address}\`. Remove that role, wait until it is taken away, or use \`/unlink\` before proving a different wallet.`,
+  const step = verifyEntry({
+    miner,
+    challenge: getChallenge(db, interaction.user.id),
+    hasRole: membership.hasRole,
+    suppliedAddress: info.canonical,
   })
-  return true
+  if (step === 'menu') {
+    await replyWithMenu(interaction, db, config, info)
+    return
+  }
+  await replyWithChallenge(interaction, db, config, info)
 }
 
 async function onVerify(interaction, client, db, config) {
+  const miner = getMiner(db, interaction.user.id)
+  const challenge = getChallenge(db, interaction.user.id)
   const supplied = interaction.options.getString('address')
-  if (!supplied) {
-    await interaction.showModal(addressModal())
+  if (supplied) {
+    const info = inspectAddress(supplied)
+    if (!info.ok) {
+      await respondPrivately(interaction, info.error)
+      return
+    }
+    await continueAfterAddress(interaction, client, db, config, info)
     return
   }
-  const info = inspectAddress(supplied)
-  if (!info.ok) {
-    await respondPrivately(interaction, info.error)
+  const membership = await memberRoleState(client, config, interaction.user.id)
+  const step = verifyEntry({ miner, challenge, hasRole: membership.hasRole })
+  if (step === 'menu') {
+    const address = linkedAddress(miner, challenge)
+    const info = inspectAddress(address)
+    if (!info.ok) {
+      await interaction.showModal(addressModal())
+      return
+    }
+    await replyWithMenu(interaction, db, config, info)
     return
   }
-  if (await rejectAddressChangeWhileVerified(interaction, client, db, config, info)) return
-  await replyWithChallenge(interaction, db, config, info)
+  if (step === 'resume-challenge') {
+    const info = inspectAddress(challenge.address)
+    await respondPrivately(interaction, {
+      content: 'You already have a message to sign. An older signature will not match. If you already proved this address, use **Restore role** or **Sign again**.',
+      embeds: [challengeEmbed(info, challenge.message)],
+      components: actionRows({ signature: true }),
+    })
+    return
+  }
+  await interaction.showModal(addressModal())
 }
 
 async function onAddressModal(interaction, client, db, config) {
@@ -292,40 +356,52 @@ async function onAddressModal(interaction, client, db, config) {
     await respondPrivately(interaction, info.error)
     return
   }
-  if (await rejectAddressChangeWhileVerified(interaction, client, db, config, info)) return
-  await replyWithChallenge(interaction, db, config, info)
+  await continueAfterAddress(interaction, client, db, config, info)
 }
 
 async function onSignAgain(interaction, db, config) {
-  const miner = getMiner(db, interaction.user.id)
-  if (!miner) {
+  const address = linkedAddress(getMiner(db, interaction.user.id), getChallenge(db, interaction.user.id))
+  if (!address) {
     await interaction.showModal(addressModal())
     return
   }
-  const info = inspectAddress(miner.address)
+  const info = inspectAddress(address)
   if (!info.ok) {
     await respondPrivately(interaction, info.error)
     return
   }
-  const started = beginChallenge(db, config, interaction.user.id, info)
-  if (started.error) {
-    await respondPrivately(interaction, started.error)
-    return
-  }
-  await respondPrivately(interaction, {
-    embeds: [challengeEmbed(started.info, started.message)],
-    components: [signatureRow()],
-  })
+  await replyWithChallenge(interaction, db, config, info)
 }
 
 async function onRestore(interaction, client, db, config) {
   await interaction.deferReply(EPHEMERAL)
   const miner = getMiner(db, interaction.user.id)
-  if (!miner) {
-    await interaction.editReply('No wallet is linked yet. Choose **Sign again** and enter the address.')
+  const challenge = getChallenge(db, interaction.user.id)
+  const address = linkedAddress(miner, challenge)
+  if (!address) {
+    await interaction.editReply({
+      content: 'No wallet is selected yet. Use **Add another wallet** or run `/verify`.',
+      components: actionRows(),
+    })
     return
   }
-  const scan = await scanAddress(miner.address, config)
+  const membership = await memberRoleState(client, config, interaction.user.id)
+  if (!miner && !membership.hasRole) {
+    await interaction.editReply({
+      content: 'Prove this address once with **Sign again** before the role can be restored.',
+      components: actionRows(),
+    })
+    return
+  }
+  const owner = addressOwner(db, address)
+  if (owner && owner.discordId !== interaction.user.id) {
+    await interaction.editReply({
+      content: 'That address is already linked to another Discord user.',
+      components: actionRows(),
+    })
+    return
+  }
+  const scan = await scanAddress(address, config)
   const lines = summarizeScan(scan)
   if (!scan.activeDatum) {
     if (scan.conclusive) {
@@ -337,7 +413,7 @@ async function onRestore(interaction, client, db, config) {
           return
         }
       }
-      recordScan(db, interaction.user.id, { roleGranted: false, scannedAt: Date.now(), scan })
+      if (miner) recordScan(db, interaction.user.id, { roleGranted: false, scannedAt: Date.now(), scan })
     }
     await interaction.editReply({
       embeds: [resultEmbed({
@@ -348,6 +424,7 @@ async function onRestore(interaction, client, db, config) {
           ? 'Every pool answered. This address is not submitting DATUM Gateway shares, so the role was not restored.'
           : 'A pool did not answer, so the role was not restored. Try again when that pool is reachable.',
       })],
+      components: actionRows(),
     })
     return
   }
@@ -355,16 +432,30 @@ async function onRestore(interaction, client, db, config) {
     await grantRole(client, config, interaction.user.id)
   } catch (error) {
     if (isUnknownMember(error)) {
-      recordScan(db, interaction.user.id, { roleGranted: false, scannedAt: Date.now(), scan })
-      await interaction.editReply('You are not in this server. Rejoin, then run `/verify`. The bot will give you a new message to sign in Shrike.')
+      if (miner) recordScan(db, interaction.user.id, { roleGranted: false, scannedAt: Date.now(), scan })
+      await interaction.editReply({
+        content: 'You are not in this server. Rejoin, then run `/verify`.',
+        components: actionRows(),
+      })
       return
     }
-    await interaction.editReply(roleErrorText(error))
+    await interaction.editReply({ content: roleErrorText(error), components: actionRows() })
     return
   }
-  recordScan(db, interaction.user.id, { roleGranted: true, scannedAt: Date.now(), scan })
+  const info = inspectAddress(address)
+  saveMiner(db, {
+    discordId: interaction.user.id,
+    address,
+    addressType: info.type,
+    signature: miner?.signature || 'restored',
+    verifiedAt: miner?.verifiedAt || Date.now(),
+    roleGranted: true,
+    lastScanAt: Date.now(),
+    lastScanJson: JSON.stringify(scan),
+  })
   await interaction.editReply({
     embeds: [resultEmbed({ granted: true, owned: true, lines })],
+    components: actionRows(),
   })
 }
 
@@ -372,18 +463,27 @@ async function onSignatureModal(interaction, client, db, config) {
   await interaction.deferReply(EPHEMERAL)
   const challenge = getChallenge(db, interaction.user.id)
   if (!challenge) {
-    await interaction.editReply('Start with `/verify` and sign the message the bot gives you.')
+    await interaction.editReply({
+      content: 'Start with `/verify` and sign the message the bot gives you.',
+      components: actionRows(),
+    })
     return
   }
   if (challenge.expiresAt < Date.now()) {
     deleteChallenge(db, interaction.user.id)
-    await interaction.editReply('That challenge expired. Run `/verify` again so the signed message is fresh.')
+    await interaction.editReply({
+      content: 'That challenge expired. Sign again or add another wallet so the signed message is fresh.',
+      components: actionRows(),
+    })
     return
   }
   const signature = interaction.fields.getTextInputValue('signature')
   const proof = verifyOwnership(challenge.address, challenge.message, signature)
   if (!proof.ok) {
-    await interaction.editReply({ embeds: [resultEmbed({ granted: false, owned: false, lines: [proof.reason] })] })
+    await interaction.editReply({
+      embeds: [resultEmbed({ granted: false, owned: false, lines: [proof.reason] })],
+      components: actionRows({ signature: true }),
+    })
     return
   }
 
@@ -399,6 +499,7 @@ async function onSignatureModal(interaction, client, db, config) {
           ? 'Every pool answered. None show fresh DATUM shares for this address.'
           : 'A pool that did not answer is not counted as a no. Check again when it is reachable, or mine through a pool that labels DATUM shares.',
       })],
+      components: actionRows(),
     })
     return
   }
@@ -411,7 +512,10 @@ async function onSignatureModal(interaction, client, db, config) {
   } catch (error) {
     if (isUnknownMember(error)) {
       deleteChallenge(db, interaction.user.id)
-      await interaction.editReply('You are not in this server, so the role cannot be assigned. Rejoin, run `/verify`, and sign a new message.')
+      await interaction.editReply({
+        content: 'You are not in this server, so the role cannot be assigned. Rejoin, then run `/verify`.',
+        components: actionRows(),
+      })
       return
     }
     roleNote = roleErrorText(error)
@@ -430,16 +534,23 @@ async function onSignatureModal(interaction, client, db, config) {
   deleteChallenge(db, interaction.user.id)
   await interaction.editReply({
     embeds: [resultEmbed({ granted: roleGranted, owned: true, lines, roleNote })],
+    components: actionRows(),
   })
 }
 
 async function onStatus(interaction, db) {
   const miner = getMiner(db, interaction.user.id)
   if (!miner) {
-    await respondPrivately(interaction, 'You are not verified yet. Use `/verify`.')
+    await respondPrivately(interaction, {
+      content: 'You are not verified yet. Use `/verify`, or **Add another wallet** to start.',
+      components: actionRows(),
+    })
     return
   }
-  await respondPrivately(interaction, { embeds: [statusEmbed(miner)] })
+  await respondPrivately(interaction, {
+    embeds: [statusEmbed(miner)],
+    components: actionRows(),
+  })
 }
 
 async function onUnlink(interaction, client, db, config) {
@@ -457,7 +568,10 @@ async function onUnlink(interaction, client, db, config) {
   }
   deleteMiner(db, interaction.user.id)
   deleteChallenge(db, interaction.user.id)
-  await interaction.editReply(`Unlinked \`${miner.address}\` and removed the role.`)
+  await interaction.editReply({
+    content: `Unlinked \`${miner.address}\` and removed the role. Enter a new address when you want to verify again.`,
+    components: [startRow()],
+  })
 }
 
 function sleep(ms) {

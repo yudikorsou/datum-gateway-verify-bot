@@ -52,8 +52,8 @@ npm start
 
 Commands are registered in `DISCORD_GUILD_ID` on startup:
 
-- `/verify` starts the flow. You can also pass `address` on the command.
-- `/status` shows the linked address and the last scan.
+- `/verify` starts the flow. You can also pass `address` on the command. If a wallet is already linked, the reply includes **Restore role**, **Sign again**, and **Add another wallet**.
+- `/status` shows the linked address, the last scan, and the same buttons.
 - `/unlink` removes the address and the role.
 
 The bot replies ephemerally, so the signature is not posted in the channel.
@@ -68,7 +68,7 @@ The bot replies ephemerally, so the signature is not posted in the channel.
    - Taproot (`bc1p…`) needs BIP322. Legacy and SegWit can use the classic Bitcoin signed message. A full signed-message block is accepted as well as the raw base64 signature.
 3. Submit the signature. The bot checks the signature, then queries the pools above.
 4. If both checks pass, it assigns `VERIFIED_ROLE_ID`.
-5. If the role is removed, or someone is kicked and later rejoins, `/verify` gives them a new message to sign in Shrike. They can sign the same wallet again, restore the role while that address still has DATUM shares, or enter a different public address. An older signature does not match the new message.
+5. If the role is removed, or someone is kicked and later rejoins, `/verify` shows **Restore role**, **Sign again**, and **Add another wallet**. Restore works only while the linked address still has DATUM shares. Sign again issues a new Shrike message for that same wallet. Add another wallet replaces the linked address after the new one is signed and still has DATUM shares. An older signature does not match a new message.
 
 The signed message includes the Discord user id, the address, and a nonce. It expires after 30 minutes. An address can only be linked to one Discord user.
 

@@ -2,6 +2,8 @@
 
 Umbrel’s Portainer app has its own Docker engine. Stacks you create there keep running after an Umbrel reboot **as long as Portainer stays installed**. Use named volumes only. Bind mounts are wiped when Portainer updates.
 
+Portainer’s nested Docker often cannot resolve public hostnames (`getaddrinfo EAI_AGAIN discord.com`). The Portainer compose file uses `network_mode: host` so the bots share Umbrel’s working DNS instead of the broken container resolver. Do not put the bots back on the default bridge unless DNS is fixed.
+
 Stop `npm start` on your Mac first. Each bot token can only be logged in once.
 
 ## 1. Install Portainer

@@ -14,30 +14,41 @@ export function startRow() {
   )
 }
 
+export function optionsRow({ restore = true, signAgain = true, newWallet = true } = {}) {
+  const buttons = []
+  if (restore) {
+    buttons.push(
+      new ButtonBuilder()
+        .setCustomId('verify:restore')
+        .setLabel('Restore role')
+        .setStyle(ButtonStyle.Secondary),
+    )
+  }
+  if (signAgain) {
+    buttons.push(
+      new ButtonBuilder()
+        .setCustomId('verify:sign-again')
+        .setLabel('Sign again')
+        .setStyle(ButtonStyle.Secondary),
+    )
+  }
+  if (newWallet) {
+    buttons.push(
+      new ButtonBuilder()
+        .setCustomId('verify:open-address')
+        .setLabel('Add another wallet')
+        .setStyle(ButtonStyle.Primary),
+    )
+  }
+  return new ActionRowBuilder().addComponents(...buttons)
+}
+
 export function restoreRow() {
-  return new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId('verify:restore')
-      .setLabel('Restore role')
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId('verify:open-address')
-      .setLabel('Enter a new address')
-      .setStyle(ButtonStyle.Primary),
-  )
+  return optionsRow()
 }
 
 export function linkedRow() {
-  return new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId('verify:restore')
-      .setLabel('Restore role')
-      .setStyle(ButtonStyle.Primary),
-    new ButtonBuilder()
-      .setCustomId('verify:sign-again')
-      .setLabel('Sign again')
-      .setStyle(ButtonStyle.Secondary),
-  )
+  return optionsRow()
 }
 
 export function signatureRow() {
