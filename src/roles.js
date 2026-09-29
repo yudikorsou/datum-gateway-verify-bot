@@ -13,6 +13,20 @@ export async function revokeRole(client, config, userId) {
   }
 }
 
+export function isUnknownMember(error) {
+  return error?.code === 10007
+}
+
+export async function memberRoleState(client, config, userId) {
+  try {
+    const member = await client.rest.get(Routes.guildMember(config.guildId, userId))
+    return { inServer: true, hasRole: member.roles.includes(config.roleId) }
+  } catch (error) {
+    if (isUnknownMember(error)) return { inServer: false, hasRole: false }
+    throw error
+  }
+}
+
 export function roleErrorText(error) {
   if (error.code === 50013 || error.status === 403) {
     return 'The bot could not change roles. Give it Manage Roles, and drag its role above the verified-miner role.'

@@ -74,4 +74,15 @@ test('armored signed-message blocks are accepted', () => {
   ].join('\n')
   assert.equal(extractSignature(armored), signature)
   assert.equal(verifyOwnership(address, message, armored).ok, true)
+  const wrapped = [
+    '-----BEGIN BITCOIN SIGNED MESSAGE-----',
+    message,
+    '-----BEGIN SIGNATURE-----',
+    address,
+    signature.slice(0, 64),
+    signature.slice(64),
+    '-----END BITCOIN SIGNED MESSAGE-----',
+  ].join('\n')
+  assert.equal(extractSignature(wrapped), signature)
+  assert.equal(verifyOwnership(address, message.replaceAll('\n', '\r\n'), signature).ok, true)
 })

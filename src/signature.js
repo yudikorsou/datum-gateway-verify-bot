@@ -8,17 +8,32 @@ initEccLib(ecc)
 
 const BASE64 = /^[A-Za-z0-9+/]+={0,2}$/
 
+const ADDRESS_LINE = /^(bc1|[13]|tb1|2)/i
+
 export function extractSignature(input) {
   const text = String(input ?? '').trim()
   if (!text) return null
   const armored = text.match(/-----BEGIN SIGNATURE-----([\s\S]*?)-----END/i)
   const body = armored ? armored[1] : text
-  const tokens = body.split(/\s+/).map((part) => part.trim()).filter(Boolean)
-  const candidates = tokens.filter((token) => token.length >= 20 && BASE64.test(token))
-  if (candidates.length) return candidates[candidates.length - 1]
-  const compact = text.replace(/\s+/g, '')
-  if (compact.length >= 20 && BASE64.test(compact)) return compact
+  const lines = body.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
+  const chunks = lines
+    .filter((line) => !ADDRESS_LINE.test(line) && !line.startsWith('-----'))
+    .map((line) => line.replace(/\s+/g, ''))
+    .filter((line) => line.length >= 20 && BASE64.test(line))
+  if (chunks.length) {
+    const joined = chunks.join('')
+    if (joined.length >= 20 && BASE64.test(joined)) return joined
+  }
+  const compact = body.replace(/\s+/g, '')
+  if (compact.length >= 20 && BASE64.test(compact) && !ADDRESS_LINE.test(compact)) return compact
   return null
+}
+
+function messageVariants(message) {
+  const lf = String(message).replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+  const crlf = lf.replace(/\n/g, '\r\n')
+  const trimmed = lf.split('\n').map((line) => line.trimEnd()).join('\n').trim()
+  return [...new Set([message, lf, crlf, trimmed, `${trimmed}\n`])]
 }
 
 function verifyBitcoinMessage(message, address, signature) {
@@ -48,11 +63,13 @@ export function verifyOwnership(address, message, signatureText) {
     }
   }
 
-  if (info.type !== 'p2tr' && verifyBitcoinMessage(message, info.canonical, signature)) {
-    return { ok: true, method: 'bitcoin-message', address: info.canonical }
-  }
-  if (verifyBip322(info.canonical, message, signature)) {
-    return { ok: true, method: 'bip322', address: info.canonical }
+  for (const variant of messageVariants(message)) {
+    if (info.type !== 'p2tr' && verifyBitcoinMessage(variant, info.canonical, signature)) {
+      return { ok: true, method: 'bitcoin-message', address: info.canonical }
+    }
+    if (verifyBip322(info.canonical, variant, signature)) {
+      return { ok: true, method: 'bip322', address: info.canonical }
+    }
   }
   return {
     ok: false,

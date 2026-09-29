@@ -14,6 +14,32 @@ export function startRow() {
   )
 }
 
+export function restoreRow() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('verify:restore')
+      .setLabel('Restore role')
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId('verify:open-address')
+      .setLabel('Enter a new address')
+      .setStyle(ButtonStyle.Primary),
+  )
+}
+
+export function linkedRow() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('verify:restore')
+      .setLabel('Restore role')
+      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
+      .setCustomId('verify:sign-again')
+      .setLabel('Sign again')
+      .setStyle(ButtonStyle.Secondary),
+  )
+}
+
 export function signatureRow() {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
@@ -35,7 +61,7 @@ export function challengeEmbed(info, message) {
       '```',
       message,
       '```',
-      '**Shrike** (it inherits this from Sparrow): Tools → Sign/Verify Message. Paste the text, choose this address, sign, then use **Submit signature**.',
+      '**Shrike** (same screen as Sparrow): Tools → Sign/Verify Message. Paste this new text, choose this address, and click **Sign**. **Verify** only checks a signature you already created. An older signature does not match this text. Then use **Submit signature**.',
       '**Bitcoin Core:** `signmessage "<address>" "<message>"`',
       '**Electrum:** Tools → Sign/Verify message.',
       '',

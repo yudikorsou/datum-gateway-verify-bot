@@ -21,9 +21,9 @@ import {
   saveChallenge,
   saveMiner,
 } from './db.js'
-import { challengeEmbed, resultEmbed, signatureRow, startRow, statusEmbed } from './present.js'
+import { challengeEmbed, linkedRow, restoreRow, resultEmbed, signatureRow, startRow, statusEmbed } from './present.js'
 import { loadSharedSnapshots, scanAddress, summarizeScan } from './pools/scan.js'
-import { grantRole, revokeRole, roleErrorText } from './roles.js'
+import { grantRole, isUnknownMember, memberRoleState, revokeRole, roleErrorText } from './roles.js'
 import { verifyOwnership } from './signature.js'
 
 const EPHEMERAL = { flags: MessageFlags.Ephemeral }
@@ -84,7 +84,7 @@ function signatureModal() {
         .setPlaceholder('Base64 signature, or the full signed-message block')
         .setStyle(TextInputStyle.Paragraph)
         .setRequired(true)
-        .setMaxLength(1000),
+        .setMaxLength(4000),
     ))
 }
 
@@ -114,7 +114,7 @@ export function createInteractionHandler({ client, db, config }) {
         return
       }
       if (interaction.isChatInputCommand()) {
-        if (interaction.commandName === 'verify') await onVerify(interaction, db, config)
+        if (interaction.commandName === 'verify') await onVerify(interaction, client, db, config)
         else if (interaction.commandName === 'status') await onStatus(interaction, db)
         else if (interaction.commandName === 'unlink') await onUnlink(interaction, client, db, config)
         return
@@ -122,10 +122,12 @@ export function createInteractionHandler({ client, db, config }) {
       if (interaction.isButton()) {
         if (interaction.customId === 'verify:open-address') await interaction.showModal(addressModal())
         else if (interaction.customId === 'verify:open-signature') await interaction.showModal(signatureModal())
+        else if (interaction.customId === 'verify:sign-again') await onSignAgain(interaction, db, config)
+        else if (interaction.customId === 'verify:restore') await onRestore(interaction, client, db, config)
         return
       }
       if (interaction.isModalSubmit()) {
-        if (interaction.customId === 'verify:address-modal') await onAddressModal(interaction, db, config)
+        if (interaction.customId === 'verify:address-modal') await onAddressModal(interaction, client, db, config)
         else if (interaction.customId === 'verify:signature-modal') await onSignatureModal(interaction, client, db, config)
       }
     } catch (error) {
@@ -137,9 +139,61 @@ export function createInteractionHandler({ client, db, config }) {
   }
 }
 
-async function onVerify(interaction, db, config) {
+async function replyWithChallenge(interaction, db, config, info) {
+  const started = beginChallenge(db, config, interaction.user.id, info)
+  if (started.error) {
+    await interaction.reply({ content: started.error, ...EPHEMERAL })
+    return
+  }
+  const miner = getMiner(db, interaction.user.id)
+  const sameWallet = miner?.address === info.canonical
+  const switching = miner && !sameWallet
+  await interaction.reply({
+    content: sameWallet
+      ? 'Sign this new message in Shrike. Restore role works only while this address is still submitting DATUM Gateway shares. To prove a different wallet, choose **Enter a new address**.'
+      : switching
+        ? `This will replace \`${miner.address}\` after you sign. Sign this new message in Shrike.`
+        : 'Sign this new message in Shrike. A signature from an older message will not match.',
+    embeds: [challengeEmbed(started.info, started.message)],
+    components: sameWallet ? [signatureRow(), restoreRow()] : [signatureRow()],
+    ...EPHEMERAL,
+  })
+}
+
+async function rejectAddressChangeWhileVerified(interaction, client, db, config, info) {
+  const miner = getMiner(db, interaction.user.id)
+  if (!miner || miner.address === info.canonical) return false
+  const membership = await memberRoleState(client, config, interaction.user.id)
+  if (!membership.inServer || !membership.hasRole) return false
+  await interaction.reply({
+    content: `You still have the role for \`${miner.address}\`. Remove that role, wait until it is taken away, or use \`/unlink\` before proving a different wallet.`,
+    ...EPHEMERAL,
+  })
+  return true
+}
+
+async function onVerify(interaction, client, db, config) {
   const supplied = interaction.options.getString('address')
   if (!supplied) {
+    const miner = getMiner(db, interaction.user.id)
+    if (miner) {
+      const membership = await memberRoleState(client, config, interaction.user.id)
+      if (!membership.inServer || !membership.hasRole) {
+        const info = inspectAddress(miner.address)
+        if (!info.ok) {
+          await interaction.reply({ content: info.error, ...EPHEMERAL })
+          return
+        }
+        await replyWithChallenge(interaction, db, config, info)
+        return
+      }
+      await interaction.reply({
+        content: `You already have the role for \`${miner.address}\`. Choose **Sign again** only if you want to prove the wallet with a new message.`,
+        components: [linkedRow()],
+        ...EPHEMERAL,
+      })
+      return
+    }
     await interaction.reply({
       content: 'Verification has two steps: prove the address is yours, then the bot checks DATUM Gateway pools for fresh shares. Start with the address.',
       components: [startRow()],
@@ -148,6 +202,31 @@ async function onVerify(interaction, db, config) {
     return
   }
   const info = inspectAddress(supplied)
+  if (!info.ok) {
+    await interaction.reply({ content: info.error, ...EPHEMERAL })
+    return
+  }
+  if (await rejectAddressChangeWhileVerified(interaction, client, db, config, info)) return
+  await replyWithChallenge(interaction, db, config, info)
+}
+
+async function onAddressModal(interaction, client, db, config) {
+  const info = inspectAddress(interaction.fields.getTextInputValue('address'))
+  if (!info.ok) {
+    await interaction.reply({ content: info.error, ...EPHEMERAL })
+    return
+  }
+  if (await rejectAddressChangeWhileVerified(interaction, client, db, config, info)) return
+  await replyWithChallenge(interaction, db, config, info)
+}
+
+async function onSignAgain(interaction, db, config) {
+  const miner = getMiner(db, interaction.user.id)
+  if (!miner) {
+    await interaction.showModal(addressModal())
+    return
+  }
+  const info = inspectAddress(miner.address)
   if (!info.ok) {
     await interaction.reply({ content: info.error, ...EPHEMERAL })
     return
@@ -164,21 +243,53 @@ async function onVerify(interaction, db, config) {
   })
 }
 
-async function onAddressModal(interaction, db, config) {
-  const info = inspectAddress(interaction.fields.getTextInputValue('address'))
-  if (!info.ok) {
-    await interaction.reply({ content: info.error, ...EPHEMERAL })
+async function onRestore(interaction, client, db, config) {
+  await interaction.deferReply(EPHEMERAL)
+  const miner = getMiner(db, interaction.user.id)
+  if (!miner) {
+    await interaction.editReply('No wallet is linked yet. Choose **Sign again** and enter the address.')
     return
   }
-  const started = beginChallenge(db, config, interaction.user.id, info)
-  if (started.error) {
-    await interaction.reply({ content: started.error, ...EPHEMERAL })
+  const scan = await scanAddress(miner.address, config)
+  const lines = summarizeScan(scan)
+  if (!scan.activeDatum) {
+    if (scan.conclusive) {
+      try {
+        await revokeRole(client, config, interaction.user.id)
+      } catch (error) {
+        if (!isUnknownMember(error)) {
+          await interaction.editReply(roleErrorText(error))
+          return
+        }
+      }
+      recordScan(db, interaction.user.id, { roleGranted: false, scannedAt: Date.now(), scan })
+    }
+    await interaction.editReply({
+      embeds: [resultEmbed({
+        granted: false,
+        owned: true,
+        lines,
+        roleNote: scan.conclusive
+          ? 'Every pool answered. This address is not submitting DATUM Gateway shares, so the role was not restored.'
+          : 'A pool did not answer, so the role was not restored. Try again when that pool is reachable.',
+      })],
+    })
     return
   }
-  await interaction.reply({
-    embeds: [challengeEmbed(started.info, started.message)],
-    components: [signatureRow()],
-    ...EPHEMERAL,
+  try {
+    await grantRole(client, config, interaction.user.id)
+  } catch (error) {
+    if (isUnknownMember(error)) {
+      recordScan(db, interaction.user.id, { roleGranted: false, scannedAt: Date.now(), scan })
+      await interaction.editReply('You are not in this server. Rejoin, then run `/verify`. The bot will give you a new message to sign in Shrike.')
+      return
+    }
+    await interaction.editReply(roleErrorText(error))
+    return
+  }
+  recordScan(db, interaction.user.id, { roleGranted: true, scannedAt: Date.now(), scan })
+  await interaction.editReply({
+    embeds: [resultEmbed({ granted: true, owned: true, lines })],
   })
 }
 
@@ -223,6 +334,11 @@ async function onSignatureModal(interaction, client, db, config) {
     await grantRole(client, config, interaction.user.id)
     roleGranted = true
   } catch (error) {
+    if (isUnknownMember(error)) {
+      deleteChallenge(db, interaction.user.id)
+      await interaction.editReply('You are not in this server, so the role cannot be assigned. Rejoin, run `/verify`, and sign a new message.')
+      return
+    }
     roleNote = roleErrorText(error)
   }
   const info = inspectAddress(challenge.address)
@@ -290,8 +406,13 @@ export async function rescanMiners(client, db, config) {
           recordScan(db, miner.discordId, { roleGranted: true, scannedAt, scan })
           console.log(`daily scan: kept ${miner.discordId}`)
         } catch (error) {
-          console.error(`daily scan: role grant failed for ${miner.discordId}`, error.message)
-          recordScan(db, miner.discordId, { roleGranted: Boolean(miner.roleGranted), scannedAt, scan })
+          if (isUnknownMember(error)) {
+            recordScan(db, miner.discordId, { roleGranted: false, scannedAt, scan })
+            console.log(`daily scan: ${miner.discordId} is not in the server; /verify will issue a new message after they rejoin`)
+          } else {
+            console.error(`daily scan: role grant failed for ${miner.discordId}`, error.message)
+            recordScan(db, miner.discordId, { roleGranted: Boolean(miner.roleGranted), scannedAt, scan })
+          }
         }
       } else if (!scan.conclusive) {
         recordScan(db, miner.discordId, { roleGranted: Boolean(miner.roleGranted), scannedAt, scan })

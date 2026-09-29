@@ -18,6 +18,10 @@ npm test
 npm start
 ```
 
+## Run 24/7 on Umbrel
+
+The 24-hour DATUM rescan only happens while the process is running. On an Umbrel, run the Discord and Telegram bots as Docker containers so they restart after a reboot. See [deploy/umbrel/README.md](deploy/umbrel/README.md).
+
 ## What the pools actually publish
 
 | Pool | Stats used | Counts as DATUM |
@@ -64,6 +68,7 @@ The bot replies ephemerally, so the signature is not posted in the channel.
    - Taproot (`bc1p…`) needs BIP322. Legacy and SegWit can use the classic Bitcoin signed message. A full signed-message block is accepted as well as the raw base64 signature.
 3. Submit the signature. The bot checks the signature, then queries the pools above.
 4. If both checks pass, it assigns `VERIFIED_ROLE_ID`.
+5. If the role is removed, or someone is kicked and later rejoins, `/verify` gives them a new message to sign in Shrike. They can sign the same wallet again, restore the role while that address still has DATUM shares, or enter a different public address. An older signature does not match the new message.
 
 The signed message includes the Discord user id, the address, and a nonce. It expires after 30 minutes. An address can only be linked to one Discord user.
 

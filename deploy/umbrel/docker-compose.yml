@@ -1,0 +1,47 @@
+# DATUM Gateway Discord + Telegram bots for Umbrel / Portainer.
+# Put this folder next to clones of both repos, or copy this file into a Portainer stack
+# and change the build contexts to the GitHub URLs after those Dockerfiles are on GitHub.
+#
+# Layout:
+#   datum-gateway-verify-bot/
+#   datum-gateway-verify-telegram/
+#   then from this directory: docker compose --env-file .env up -d
+
+name: datum-gateway-bots
+
+services:
+  discord:
+    build:
+      context: ../..
+    restart: unless-stopped
+    init: true
+    environment:
+      DISCORD_TOKEN: ${DISCORD_TOKEN}
+      DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID}
+      DISCORD_GUILD_ID: ${DISCORD_GUILD_ID}
+      VERIFIED_ROLE_ID: ${VERIFIED_ROLE_ID}
+      SCAN_INTERVAL_HOURS: ${SCAN_INTERVAL_HOURS:-24}
+      SHARE_MAX_AGE_HOURS: ${SHARE_MAX_AGE_HOURS:-24}
+      CONVOY_TREAT_ACTIVE_AS_DATUM: ${CONVOY_TREAT_ACTIVE_AS_DATUM:-true}
+      DATABASE_PATH: /data/bot.sqlite
+    volumes:
+      - discord-data:/data
+
+  telegram:
+    build:
+      context: ../../../datum-gateway-verify-telegram
+    restart: unless-stopped
+    init: true
+    environment:
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID}
+      SCAN_INTERVAL_HOURS: ${SCAN_INTERVAL_HOURS:-24}
+      SHARE_MAX_AGE_HOURS: ${SHARE_MAX_AGE_HOURS:-24}
+      CONVOY_TREAT_ACTIVE_AS_DATUM: ${CONVOY_TREAT_ACTIVE_AS_DATUM:-true}
+      DATABASE_PATH: /data/bot.sqlite
+    volumes:
+      - telegram-data:/data
+
+volumes:
+  discord-data:
+  telegram-data:

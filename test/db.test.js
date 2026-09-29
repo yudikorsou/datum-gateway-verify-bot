@@ -25,5 +25,19 @@ test('a linked miner can be stored and read back', () => {
   const row = getMiner(db, '99')
   assert.equal(row.roleGranted, 1)
   assert.equal(row.addressType, 'p2wpkh')
+  saveMiner(db, {
+    discordId: '99',
+    address: '1BgGZ9tcN4rm9KBzDn7KprQz87SZ26SAMH',
+    addressType: 'p2pkh',
+    signature: 'def',
+    verifiedAt: 12,
+    roleGranted: false,
+    lastScanAt: 13,
+    lastScanJson: '{"activeDatum":false}',
+  })
+  const updated = getMiner(db, '99')
+  assert.equal(updated.address, '1BgGZ9tcN4rm9KBzDn7KprQz87SZ26SAMH')
+  assert.equal(updated.addressType, 'p2pkh')
+  assert.equal(updated.roleGranted, 0)
   fs.rmSync(file, { force: true })
 })
