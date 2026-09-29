@@ -1,40 +1,32 @@
-# Paste this into a Portainer stack on Umbrel.
-# Named volumes only. restart: unless-stopped keeps both bots up after a reboot
-# as long as the Portainer app itself stays installed.
-
-name: datum-gateway-bots
-
 services:
   discord:
     image: ghcr.io/yudikorsou/datum-gateway-verify-bot:latest
     restart: unless-stopped
     init: true
     environment:
-      DISCORD_TOKEN: ${DISCORD_TOKEN}
-      DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID}
-      DISCORD_GUILD_ID: ${DISCORD_GUILD_ID}
-      VERIFIED_ROLE_ID: ${VERIFIED_ROLE_ID}
-      SCAN_INTERVAL_HOURS: ${SCAN_INTERVAL_HOURS:-24}
-      SHARE_MAX_AGE_HOURS: ${SHARE_MAX_AGE_HOURS:-24}
-      CONVOY_TREAT_ACTIVE_AS_DATUM: ${CONVOY_TREAT_ACTIVE_AS_DATUM:-true}
-      DATABASE_PATH: /data/bot.sqlite
+      DISCORD_TOKEN: "${DISCORD_TOKEN}"
+      DISCORD_CLIENT_ID: "${DISCORD_CLIENT_ID}"
+      DISCORD_GUILD_ID: "${DISCORD_GUILD_ID}"
+      VERIFIED_ROLE_ID: "${VERIFIED_ROLE_ID}"
+      SCAN_INTERVAL_HOURS: "24"
+      SHARE_MAX_AGE_HOURS: "24"
+      CONVOY_TREAT_ACTIVE_AS_DATUM: "true"
+      DATABASE_PATH: "/data/bot.sqlite"
     volumes:
       - discord-data:/data
-
   telegram:
     image: ghcr.io/yudikorsou/datum-gateway-telegram-verify-bot:latest
     restart: unless-stopped
     init: true
     environment:
-      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
-      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID}
-      SCAN_INTERVAL_HOURS: ${SCAN_INTERVAL_HOURS:-24}
-      SHARE_MAX_AGE_HOURS: ${SHARE_MAX_AGE_HOURS:-24}
-      CONVOY_TREAT_ACTIVE_AS_DATUM: ${CONVOY_TREAT_ACTIVE_AS_DATUM:-true}
-      DATABASE_PATH: /data/bot.sqlite
+      TELEGRAM_BOT_TOKEN: "${TELEGRAM_BOT_TOKEN}"
+      TELEGRAM_CHAT_ID: "${TELEGRAM_CHAT_ID}"
+      SCAN_INTERVAL_HOURS: "24"
+      SHARE_MAX_AGE_HOURS: "24"
+      CONVOY_TREAT_ACTIVE_AS_DATUM: "true"
+      DATABASE_PATH: "/data/bot.sqlite"
     volumes:
       - telegram-data:/data
-
 volumes:
   discord-data:
     name: datum-discord-data
