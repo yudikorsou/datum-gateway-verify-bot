@@ -29,7 +29,7 @@ services:
 
   telegram:
     build:
-      context: ../../../datum-gateway-verify-telegram
+      context: ../../../datum-gateway-telegram-verify-bot
     restart: unless-stopped
     init: true
     environment:

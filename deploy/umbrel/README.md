@@ -12,10 +12,10 @@ SSH in (Settings → Advanced → enable SSH, then `ssh umbrel@umbrel.local`).
 mkdir -p ~/datum-bots
 cd ~/datum-bots
 git clone https://github.com/yudikorsou/datum-gateway-verify-bot.git
-git clone https://github.com/yudikorsou/datum-gateway-verify-telegram.git
+git clone https://github.com/yudikorsou/datum-gateway-telegram-verify-bot.git
 ```
 
-If the Umbrel clone does not yet include the Docker files, copy this Mac folder over instead of cloning. Ask to push the Docker files to GitHub if you want `git clone` on the Umbrel to be enough.
+If `git clone` on the Umbrel is missing Docker files, copy the folders from this Mac. After this commit they are on GitHub.
 
 ## 2. Fill secrets
 
