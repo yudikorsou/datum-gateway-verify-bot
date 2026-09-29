@@ -1,6 +1,7 @@
 services:
   discord:
     image: ghcr.io/yudikorsou/datum-gateway-verify-bot:latest
+    pull_policy: always
     restart: unless-stopped
     init: true
     environment:
@@ -16,6 +17,7 @@ services:
       - discord-data:/data
   telegram:
     image: ghcr.io/yudikorsou/datum-gateway-telegram-verify-bot:latest
+    pull_policy: always
     restart: unless-stopped
     init: true
     environment:

@@ -47,12 +47,11 @@ async function onReady() {
 
 client.once('clientReady', onReady)
 client.once('ready', onReady)
+client.on('error', (error) => console.error('discord client error', error))
+client.on('warn', (message) => console.warn('discord warn', message))
+client.on('interactionCreate', (interaction) => {
+  console.log(`interaction ${interaction.type} ${interaction.commandName || interaction.customId || ''}`)
+})
 client.on('interactionCreate', createInteractionHandler({ client, db, config }))
 
-try {
-  await registerCommands(config)
-  console.log(`commands registered in guild ${config.guildId}`)
-} catch (error) {
-  console.error('command registration failed', error)
-}
 await client.login(config.token)
