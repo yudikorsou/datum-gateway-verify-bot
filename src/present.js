@@ -60,7 +60,17 @@ export function signatureRow() {
   )
 }
 
-export function challengeEmbed(info, message) {
+export function challengeContent(message, extra = '') {
+  return [
+    extra,
+    'Copy this exact text into your wallet — tap the copy icon on the block, or long-press it. Discord will not let you copy text from the card below.',
+    '```',
+    message,
+    '```',
+  ].filter(Boolean).join('\n')
+}
+
+export function challengeEmbed(info) {
   return new EmbedBuilder()
     .setColor(0xe8a317)
     .setTitle('Step 1 of 2 — prove you own this address')
@@ -68,13 +78,9 @@ export function challengeEmbed(info, message) {
       `Address: \`${info.canonical}\``,
       `Type: ${info.label}`,
       '',
-      'Watch the attached video, or the private copy the bot sends when you open **Submit signature**.',
+      'The sign text is in the copyable code block above this card. Watch the attached video, or the private copy the bot sends when you open **Submit signature**.',
       '',
-      'Sign this exact text in a wallet that can spend the address:',
-      '```',
-      message,
-      '```',
-      '**Shrike** (same screen as Sparrow): Tools → Sign/Verify Message. Paste this new text, choose this address, and click **Sign**. **Verify** only checks a signature you already created. An older signature does not match this text. Then use **Submit signature**.',
+      '**Shrike** (same screen as Sparrow): Tools → Sign/Verify Message. Paste the copied text, choose this address, and click **Sign**. **Verify** only checks a signature you already created. An older signature does not match this text. Then use **Submit signature**.',
       '**Bitcoin Core:** `signmessage "<address>" "<message>"`',
       '**Electrum:** Tools → Sign/Verify message.',
       '',

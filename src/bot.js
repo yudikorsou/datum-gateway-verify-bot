@@ -21,7 +21,7 @@ import {
   saveChallenge,
   saveMiner,
 } from './db.js'
-import { challengeEmbed, optionsRow, restoreResultEmbed, resultEmbed, signatureRow, startRow, statusEmbed } from './present.js'
+import { challengeContent, challengeEmbed, optionsRow, restoreResultEmbed, resultEmbed, signatureRow, startRow, statusEmbed } from './present.js'
 import { loadSharedSnapshots, scanAddress, summarizeScan } from './pools/scan.js'
 import { grantRole, isUnknownMember, memberRoleState, revokeRole, roleErrorText } from './roles.js'
 import { explainerFiles } from './explainer.js'
@@ -242,10 +242,10 @@ async function replyWithMenu(interaction, db, config, info, extra = '') {
   })
 }
 
-function challengeReply(info, message, content) {
+function challengeReply(info, message, extra) {
   return {
-    content,
-    embeds: [challengeEmbed(info, message)],
+    content: challengeContent(message, extra),
+    embeds: [challengeEmbed(info)],
     components: actionRows({ signature: true }),
     files: explainerFiles(),
   }
@@ -256,9 +256,12 @@ async function sendSignatureHelp(interaction, db) {
   const info = challenge ? inspectAddress(challenge.address) : null
   const payload = {
     content: challenge
-      ? 'The sign popup is open. Watch the video, sign this exact text, then paste the signature in the popup. An older signature will not match.'
+      ? challengeContent(
+        challenge.message,
+        'The sign popup is open. Watch the video, then paste the signature in the popup. An older signature will not match.',
+      )
       : 'Watch the video, then paste your signature in the popup.',
-    embeds: info?.ok ? [challengeEmbed(info, challenge.message)] : [],
+    embeds: info?.ok ? [challengeEmbed(info)] : [],
     files: explainerFiles(),
   }
   try {
