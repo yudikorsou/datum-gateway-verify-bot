@@ -1,11 +1,9 @@
 # DATUM Gateway Discord + Telegram bots for Umbrel / Portainer.
-# Put this folder next to clones of both repos, or copy this file into a Portainer stack
-# and change the build contexts to the GitHub URLs after those Dockerfiles are on GitHub.
+# From this directory: docker compose --env-file .env up -d --build
 #
-# Layout:
-#   datum-gateway-verify-bot/
-#   datum-gateway-verify-telegram/
-#   then from this directory: docker compose --env-file .env up -d
+# Layout (one repo):
+#   datum-gateway-verify-bot/          Discord bot (repo root)
+#   datum-gateway-verify-bot/telegram/ Telegram bot
 
 name: datum-gateway-bots
 
@@ -29,7 +27,7 @@ services:
 
   telegram:
     build:
-      context: ../../../datum-gateway-telegram-verify-bot
+      context: ../../telegram
     restart: unless-stopped
     init: true
     environment:

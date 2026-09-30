@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Sign the Telegram message</title>
+<style>
+  :root {
+    --bg: #11140f;
+    --ink: #f3efe4;
+    --muted: #b7b09f;
+    --gold: #e8a317;
+    --field: #0d100c;
+    --card: #1b2118;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; background: var(--bg); color: var(--ink); font-family: "SF Pro Text", "Segoe UI", sans-serif; }
+  #stage { position: relative; width: 1920px; height: 1080px; }
+  header { position: absolute; top: 36px; left: 64px; right: 64px; display: flex; justify-content: space-between; align-items: flex-end; z-index: 5; }
+  .brand { font-size: 18px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--gold); font-weight: 700; }
+  #stepLabel { font-size: 28px; font-weight: 650; }
+  #viewport { position: absolute; inset: 120px 64px 150px; }
+  .view { position: absolute; inset: 0; opacity: 0; transform: translateY(16px); }
+  .view.on { opacity: 1; transform: none; }
+  footer { position: absolute; left: 64px; right: 64px; bottom: 36px; display: grid; gap: 14px; z-index: 5; }
+  #caption { min-height: 64px; font-size: 30px; line-height: 1.35; font-weight: 600; }
+  #rail { display: flex; gap: 10px; }
+  .rail-item { height: 8px; flex: 1; border-radius: 99px; background: #3a4033; overflow: hidden; }
+  .rail-item > span { display: block; height: 100%; width: 0; background: var(--gold); }
+  #cursor { position: absolute; width: 28px; height: 28px; z-index: 20; pointer-events: none; filter: drop-shadow(0 2px 2px rgba(0,0,0,.45)); transition: left .35s ease, top .35s ease; }
+  .click { position: absolute; width: 18px; height: 18px; margin: -9px 0 0 6px; border: 3px solid white; border-radius: 50%; opacity: 0; }
+  .click.on { animation: ping .45s ease-out; }
+  @keyframes ping { from { opacity: 1; transform: scale(.4); } to { opacity: 0; transform: scale(1.8); } }
+
+  .phone {
+    width: 720px;
+    margin: 0 auto;
+    background: var(--card);
+    border: 1px solid #3a4033;
+    border-radius: 28px;
+    padding: 28px 28px 32px;
+    box-shadow: 0 30px 80px rgba(0,0,0,.35);
+    min-height: 100%;
+  }
+  .phone h2 { margin: 0 0 8px; font-size: 28px; }
+  .phone .hint { color: var(--muted); font-size: 18px; margin: 0 0 18px; line-height: 1.4; }
+  .sign {
+    white-space: pre-wrap;
+    word-break: break-word;
+    background: var(--field);
+    border-radius: 12px;
+    padding: 16px;
+    margin: 0 0 14px;
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: 16px;
+    line-height: 1.45;
+  }
+  .sign.hl { outline: 2px solid var(--gold); outline-offset: 4px; }
+  .copy, .submit {
+    width: 100%;
+    border: 0;
+    border-radius: 12px;
+    padding: 14px;
+    font: 650 18px/1 inherit;
+    background: var(--gold);
+    color: #1b1405;
+  }
+  .copy { background: transparent; color: inherit; border: 1px solid #3a4033; margin-bottom: 16px; }
+  .copy.press, .submit.press { filter: brightness(1.15); transform: translateY(1px); }
+  label { display: block; font-weight: 650; margin: 10px 0 8px; }
+  textarea.field {
+    width: 100%;
+    min-height: 110px;
+    border: 1px solid #3a4033;
+    background: var(--field);
+    color: inherit;
+    border-radius: 12px;
+    padding: 14px;
+    font: 16px/1.4 ui-monospace, Menlo, monospace;
+    resize: none;
+  }
+
+  .window { height: 100%; border-radius: 14px; overflow: hidden; box-shadow: 0 30px 80px rgba(0,0,0,.35); display: flex; flex-direction: column; position: relative; }
+  .titlebar { height: 48px; display: flex; align-items: center; gap: 8px; padding: 0 16px; font-weight: 650; }
+  .dots { display: flex; gap: 7px; margin-right: 10px; }
+  .dots i { width: 12px; height: 12px; border-radius: 50%; display: block; }
+  .dots i:nth-child(1) { background: #ff5f57; } .dots i:nth-child(2) { background: #febc2e; } .dots i:nth-child(3) { background: #28c840; }
+  .menu { display: flex; gap: 18px; font-weight: 600; font-size: 15px; position: relative; }
+  .menu .open { background: rgba(255,255,255,.12); border-radius: 6px; padding: 4px 8px; margin: -4px -8px; }
+  .dropdown { position: absolute; top: 34px; min-width: 240px; border-radius: 8px; padding: 6px; box-shadow: 0 16px 40px rgba(0,0,0,.35); display: none; z-index: 4; }
+  .dropdown.show { display: block; }
+  .dropdown div { padding: 8px 10px; border-radius: 6px; }
+  .dropdown div.hot { background: #e8a317; color: #1b1404; }
+  .appbody { flex: 1; position: relative; }
+  .dim { position: absolute; inset: 0; background: rgba(0,0,0,.45); opacity: 0; }
+  .dim.on { opacity: 1; }
+  .sparrow { background: #1b1d21; color: #eee; }
+  .sparrow .titlebar { background: #141518; }
+  .sparrow .dropdown { background: #2a2d33; left: 168px; }
+  .wallet-fake { padding: 28px 32px; color: #c8cdd4; }
+  .wallet-fake h3 { margin: 0 0 8px; color: white; }
+  .dialog { position: absolute; left: 50%; top: 46%; transform: translate(-50%, -46%) scale(.96); width: 760px; background: #2a2d33; border: 1px solid #3c414b; border-radius: 12px; padding: 22px 22px 16px; opacity: 0; }
+  .dialog.on { opacity: 1; transform: translate(-50%, -46%) scale(1); }
+  .dialog h3 { margin: 0 0 14px; }
+  .dialog label { display: block; font-size: 13px; color: #b7bec8; margin: 10px 0 6px; font-weight: 500; }
+  .dialog input, .dialog textarea { width: 100%; border: 1px solid #4a5160; background: #1b1d21; color: #f4f7fb; border-radius: 6px; padding: 8px 10px; font-family: ui-monospace, Menlo, monospace; font-size: 14px; }
+  .dialog textarea { min-height: 92px; resize: none; }
+  .dialog textarea.sig { min-height: 64px; }
+  .formats { display: flex; border: 1px solid #4a5160; border-radius: 8px; overflow: hidden; }
+  .formats span { flex: 1; text-align: center; padding: 8px 6px; font-size: 13px; color: #d5dbe3; }
+  .formats span.sel { background: #e8a317; color: #1b1404; font-weight: 700; }
+  .buttons { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+  .buttons button { border: 1px solid #5a6270; background: #3a3f49; color: white; border-radius: 6px; padding: 8px 12px; font-weight: 650; }
+  .buttons button.primary { background: #e8a317; color: #1b1404; border-color: #e8a317; }
+  button.down { filter: brightness(1.2); transform: translateY(1px); }
+  .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; font-size: 26px; line-height: 1.4; }
+  .cards div { background: #1b2118; border-radius: 14px; padding: 24px; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <header>
+    <div class="brand">DATUM Gateway verification</div>
+    <div id="stepLabel">Telegram form</div>
+  </header>
+  <div id="viewport">
+    <section class="view" id="view-miniapp">
+      <div class="phone">
+        <h2>Template 2 of 2 — digital signature</h2>
+        <p class="hint">Copy the sign text, create the signature in Sparrow or Shrike, then paste it into the field below.</p>
+        <label>Sign this exact text</label>
+        <pre class="sign" id="appText"></pre>
+        <button class="copy" id="copyBtn">Copy sign text</button>
+        <label>Digital signature</label>
+        <textarea class="field" id="appSig" readonly placeholder="Paste your digital signature here"></textarea>
+        <button class="submit" id="appSubmit">Submit signature</button>
+      </div>
+    </section>
+
+    <section class="view" id="view-sparrow">
+      <div class="window sparrow">
+        <div class="titlebar"><div class="dots"><i></i><i></i><i></i></div><div class="menu"><span>File</span><span>Settings</span><span id="tools">Tools</span><span>Help</span>
+          <div class="dropdown" id="menu"><div>Restart</div><div class="hot" id="menuItem">Sign/Verify Message</div><div>Verify download</div></div>
+        </div></div>
+        <div class="appbody">
+          <div class="wallet-fake"><h3>Sparrow / Shrike</h3><div>Blake2b wallet · Receive · Addresses</div></div>
+          <div class="dim" id="dim"></div>
+          <div class="dialog" id="dialog">
+            <h3>Sign/Verify Message</h3>
+            <label>Address:</label>
+            <input id="walletAddr" readonly value="" />
+            <label>Message:</label>
+            <textarea id="walletMsg" readonly></textarea>
+            <label>Signature:</label>
+            <textarea class="sig" id="walletSig" readonly></textarea>
+            <label>Format:</label>
+            <div class="formats"><span id="fmtE">Standard (Electrum)</span><span id="fmtT">BIP137 (Trezor)</span><span>BIP322 (Simple)</span></div>
+            <div class="buttons"><button>Sign by QR</button><button class="primary" id="signBtn">Sign</button><button>Verify</button><button>Done</button></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="view" id="view-paste">
+      <div class="phone">
+        <h2>Template 2 of 2 — digital signature</h2>
+        <p class="hint">Paste the signature from Sparrow or Shrike. Other members cannot see this.</p>
+        <label>Sign this exact text</label>
+        <pre class="sign" id="pasteText"></pre>
+        <label>Digital signature</label>
+        <textarea class="field" id="pasteSig" readonly></textarea>
+        <button class="submit" id="pasteSubmit">Submit signature</button>
+      </div>
+    </section>
+
+    <section class="view" id="view-format">
+      <div class="window" style="background:#161910;color:#f3efe4;padding:72px 80px;">
+        <div class="brand">Before you submit</div>
+        <h2 style="font-size:48px;margin:18px 0 28px;">Sign the message, not a transaction</h2>
+        <div class="cards">
+          <div><b style="color:#e8a317;">bc1q… and 1… and 3…</b><br>Use the classic Bitcoin signed message. In Sparrow or Shrike, Standard (Electrum) or BIP137.</div>
+          <div><b style="color:#e8a317;">bc1p… Taproot</b><br>Choose BIP322 (Simple), then sign. The bot accepts that signature.</div>
+        </div>
+        <p style="font-size:24px;color:#c5d0dc;margin-top:28px;">Shrike’s SIGHASH_UNIFIED flag is for spending coins. This proof does not use it.</p>
+      </div>
+    </section>
+  </div>
+  <footer>
+    <div id="caption"></div>
+    <div id="rail"></div>
+  </footer>
+  <div id="cursor"><svg viewBox="0 0 24 24" width="28" height="28"><path fill="#fff" stroke="#111" stroke-width="1.2" d="M4 2 L4 20 L9 15 L13 22 L16 20 L12 13 L19 13 Z"/></svg><div class="click" id="ripple"></div></div>
+</div>
+<script>
+const MESSAGE = `DATUM Gateway Telegram verification
+Telegram user: 123456789
+Address: bc1q2p9fpzvut4qk9agqa9jf4zl3j7s8xwlgmvexgd
+Nonce: 41ff0b3009a4d1a2239bef09e020cd9c
+Issued: 2026-09-30T01:10:00.000Z`;
+const ADDRESS = "bc1q2p9fpzvut4qk9agqa9jf4zl3j7s8xwlgmvexgd";
+const EXAMPLE_SIG = "EXAMPLE SIGNATURE — paste the one from your wallet";
+
+const $ = (id) => document.getElementById(id);
+const views = ["miniapp", "sparrow", "paste", "format"];
+
+function show(id) {
+  for (const name of views) $("view-" + name).classList.toggle("on", name === id);
+}
+
+function cursor(x, y, click) {
+  $("cursor").style.left = x + "px";
+  $("cursor").style.top = y + "px";
+  $("ripple").classList.toggle("on", !!click);
+}
+
+function rail(active, p) {
+  const labels = ["Telegram", "Sparrow", "Paste", "Format"];
+  $("rail").innerHTML = labels.map((label, i) => {
+    const fill = i < active ? 100 : i === active ? Math.round(p * 100) : 0;
+    return `<div class="rail-item" title="${label}"><span style="width:${fill}%"></span></div>`;
+  }).join("");
+}
+
+window.renderAt = function renderAt(t, timing) {
+  const scenes = timing.scenes;
+  let index = scenes.length - 1;
+  for (let i = 0; i < scenes.length; i++) if (t < scenes[i].end) { index = i; break; }
+  const scene = scenes[index];
+  const p = Math.min(1, Math.max(0, (t - scene.start) / (scene.end - scene.start)));
+  $("caption").textContent = scene.caption;
+  $("stepLabel").textContent = scene.title;
+  show(scene.view);
+  rail(index, p);
+
+  $("appText").textContent = MESSAGE;
+  $("pasteText").textContent = MESSAGE;
+  $("appText").classList.toggle("hl", scene.view === "miniapp" && p > 0.28);
+  $("copyBtn").classList.toggle("press", scene.view === "miniapp" && p > 0.7 && p < 0.86);
+  $("appSig").value = "";
+  $("appSubmit").classList.remove("press");
+  $("menu").classList.remove("show");
+  $("tools").classList.remove("open");
+  $("dim").classList.remove("on");
+  $("dialog").classList.remove("on");
+  $("signBtn").classList.remove("down");
+  $("fmtE").classList.remove("sel");
+  $("fmtT").classList.remove("sel");
+  $("walletMsg").value = "";
+  $("walletAddr").value = "";
+  $("walletSig").value = "";
+  $("pasteSig").value = "";
+  $("pasteSubmit").classList.remove("press");
+
+  if (scene.view === "miniapp") {
+    cursor(1180, 520, p > 0.72 && p < 0.82);
+  } else if (scene.view === "sparrow") {
+    const menu = p > 0.08 && p < 0.28;
+    $("menu").classList.toggle("show", menu);
+    $("tools").classList.toggle("open", menu || p >= 0.28);
+    const dialog = p >= 0.28;
+    $("dim").classList.toggle("on", dialog);
+    $("dialog").classList.toggle("on", dialog);
+    if (p >= 0.4) { $("walletMsg").value = MESSAGE; $("walletAddr").value = ADDRESS; }
+    if (p >= 0.55 && p < 0.7) $("fmtE").classList.add("sel");
+    if (p >= 0.7) $("fmtT").classList.add("sel");
+    $("walletSig").value = p >= 0.86 ? EXAMPLE_SIG : "";
+    $("signBtn").classList.toggle("down", p >= 0.8 && p < 0.88);
+    if (p < 0.12) cursor(430, 168, false);
+    else if (p < 0.28) cursor(520, 250, p > 0.2 && p < 0.26);
+    else if (p < 0.8) cursor(1288, 760, false);
+    else cursor(1288, 760, p < 0.86);
+  } else if (scene.view === "paste") {
+    $("pasteSig").value = p > 0.25 ? EXAMPLE_SIG : "";
+    $("pasteSubmit").classList.toggle("press", p > 0.72);
+    cursor(1180, 780, p > 0.72 && p < 0.82);
+  } else {
+    cursor(960, 540, false);
+  }
+};
+</script>
+</body>
+</html>

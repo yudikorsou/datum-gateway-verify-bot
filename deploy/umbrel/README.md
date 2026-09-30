@@ -18,10 +18,10 @@ Stop `npm start` on your Mac first. Each bot token can only be logged in once.
 
 ## 2. Wait for the public images
 
-GitHub builds these images on every push to `main`:
+GitHub builds these images from this repo on every push to `main`:
 
-- `ghcr.io/yudikorsou/datum-gateway-verify-bot:latest`
-- `ghcr.io/yudikorsou/datum-gateway-telegram-verify-bot:latest`
+- `ghcr.io/yudikorsou/datum-gateway-verify-bot:latest` (Discord, repo root)
+- `ghcr.io/yudikorsou/datum-gateway-telegram-verify-bot:latest` (Telegram, `telegram/`)
 
 Open each package on GitHub and set visibility to **Public** the first time (Packages → the image → Package settings → Change visibility).
 

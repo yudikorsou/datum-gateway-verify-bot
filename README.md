@@ -1,6 +1,17 @@
 # DATUM Gateway verification bot
 
-Discord bot for miners who build their own block templates with [DATUM Gateway](https://github.com/luke-jr/datum_gateway). A member gets a role only after both of these are true:
+Discord and Telegram bots for miners who build their own block templates with [DATUM Gateway](https://github.com/luke-jr/datum_gateway).
+
+| Path | Bot |
+| --- | --- |
+| Repo root | Discord (`discord.js`) |
+| [`telegram/`](telegram/) | Telegram (`grammy`) + Mini App under [`telegram/webapp/`](telegram/webapp/) |
+
+Both keep separate Docker images and processes. Shared pool checks stay independent per bot, so Discord and Telegram logic does not share a runtime.
+
+## Discord
+
+A member gets a role only after both of these are true:
 
 1. They sign a fresh message with the key for a public Bitcoin address.
 2. That address is submitting shares through a DATUM Gateway on a pool that publishes miner stats.
@@ -23,6 +34,18 @@ cp .env.example .env
 npm test
 npm start
 ```
+
+## Telegram
+
+```bash
+cd telegram
+npm install
+cp .env.example .env
+npm test
+npm start
+```
+
+See [telegram/README.md](telegram/README.md). The Mini App is published from `telegram/webapp/` to GitHub Pages.
 
 ## What the pools actually publish
 

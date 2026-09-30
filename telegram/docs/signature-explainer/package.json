@@ -1,0 +1,12 @@
+{
+  "name": "telegram-signature-explainer",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "dependencies": {
+    "ffmpeg-static": "^5.2.0",
+    "puppeteer-core": "^24.19.0"
+  }
+}

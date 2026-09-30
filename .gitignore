@@ -1,7 +1,11 @@
 node_modules/
+telegram/node_modules/
 .env
+telegram/.env
 data/*.sqlite
 data/*.sqlite-*
+telegram/data/*.sqlite
+telegram/data/*.sqlite-*
 *.log
 assets/
 deploy/umbrel/.env

@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>DATUM Gateway verification</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #11140f;
+      --ink: #f3efe4;
+      --muted: #b7b09f;
+      --accent: #e8a317;
+      --field: #0d100c;
+      --line: #3a4033;
+      --dock-height: 92px;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      font: 16px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--tg-theme-bg-color, var(--bg));
+      color: var(--tg-theme-text-color, var(--ink));
+    }
+    body {
+      padding: 16px 16px calc(var(--dock-height) + env(safe-area-inset-bottom, 0px));
+    }
+    h1 { font-size: 1.15rem; margin: 0 0 8px; }
+    p { margin: 0 0 12px; color: var(--tg-theme-hint-color, var(--muted)); }
+    label { display: block; font-weight: 650; margin-bottom: 8px; }
+    textarea {
+      width: 100%;
+      border: 1px solid var(--tg-theme-hint-color, var(--line));
+      background: var(--tg-theme-secondary-bg-color, var(--field));
+      color: inherit;
+      border-radius: 12px;
+      padding: 14px;
+      font: inherit;
+      outline: none;
+      min-height: 96px;
+      resize: vertical;
+    }
+    textarea:focus { border-color: var(--accent); }
+    .sign {
+      white-space: pre-wrap;
+      word-break: break-word;
+      background: var(--tg-theme-secondary-bg-color, var(--field));
+      border-radius: 12px;
+      padding: 12px;
+      margin: 0 0 12px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 13px;
+    }
+    .copy, .submit {
+      width: 100%;
+      border: 0;
+      border-radius: 12px;
+      font: 650 16px/1 inherit;
+      cursor: pointer;
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .copy {
+      margin: 0 0 12px;
+      padding: 12px;
+      background: transparent;
+      color: inherit;
+      border: 1px solid var(--tg-theme-hint-color, var(--line));
+    }
+    .submit {
+      padding: 16px;
+      background: var(--tg-theme-button-color, var(--accent));
+      color: var(--tg-theme-button-text-color, #1b1405);
+    }
+    .dock {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 1000;
+      padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px));
+      background: var(--tg-theme-bg-color, var(--bg));
+      border-top: 1px solid var(--tg-theme-hint-color, var(--line));
+    }
+    .video-wrap { margin: 0 0 12px; }
+    .video-wrap video {
+      width: 100%;
+      max-height: 220px;
+      border-radius: 12px;
+      background: #0d100c;
+    }
+    .video-note { font-size: 13px; margin: 8px 0 0; }
+    #sendPanel {
+      margin: 0 0 16px;
+      padding: 14px;
+      border: 2px solid var(--accent);
+      border-radius: 12px;
+      background: #1b1608;
+    }
+    #sendPanel[hidden] { display: none; }
+  </style>
+</head>
+<body>
+  <h1 id="title">Access request</h1>
+  <p id="hint"></p>
+  <div id="messageBox" hidden>
+    <div class="video-wrap">
+      <video id="guide" controls playsinline preload="metadata" controlslist="nodownload">
+        <source src="sign-the-message.mp4" type="video/mp4">
+      </video>
+      <p class="video-note">Watch how to sign this text in Sparrow or Shrike. The signature in the video is an example.</p>
+    </div>
+    <label>Sign this exact text in Shrike, then paste the signature below</label>
+    <pre class="sign" id="message"></pre>
+    <button type="button" class="copy" id="copy">Copy sign text</button>
+  </div>
+  <label id="fieldLabel" for="value">Public wallet address</label>
+  <textarea id="value" autocomplete="off" autocapitalize="off" spellcheck="false"></textarea>
+  <div id="sendPanel" hidden>
+    <p id="sendHint">The bot did not receive that submit. Copy the text below and send it in this private chat with the bot. That starts the signature and DATUM check.</p>
+    <pre class="sign" id="fallback"></pre>
+    <button type="button" class="copy" id="copyProof">Copy for the bot chat</button>
+  </div>
+  <div class="dock">
+    <button type="button" class="submit" id="submit">Continue</button>
+  </div>
+  <script>
+    const tg = window.Telegram?.WebApp
+    const params = new URLSearchParams(location.search)
+    const title = document.getElementById('title')
+    const hint = document.getElementById('hint')
+    const field = document.getElementById('value')
+    const label = document.getElementById('fieldLabel')
+    const box = document.getElementById('messageBox')
+    const message = document.getElementById('message')
+    const submit = document.getElementById('submit')
+    const copy = document.getElementById('copy')
+    const guide = document.getElementById('guide')
+    const fallback = document.getElementById('fallback')
+    const sendPanel = document.getElementById('sendPanel')
+    const copyProof = document.getElementById('copyProof')
+    const sendHint = document.getElementById('sendHint')
+
+    let step = 'address'
+    let proof = null
+    let sending = false
+    const PENDING_PREFIX = 'datumPendingProof:'
+
+    function hideNativeButtons() {
+      try {
+        tg?.MainButton?.hideProgress?.()
+        tg?.MainButton?.hide?.()
+        tg?.SecondaryButton?.hide?.()
+        tg?.BottomButton?.hide?.()
+      } catch { /* older Telegram clients */ }
+    }
+
+    function challengeMessage(telegramId, address, nonce, issued) {
+      return [
+        'DATUM Gateway Telegram verification',
+        'Telegram user: ' + telegramId,
+        'Address: ' + address,
+        'Nonce: ' + nonce,
+        'Issued: ' + issued,
+      ].join('\n')
+    }
+
+    function randomNonce() {
+      const bytes = new Uint8Array(16)
+      crypto.getRandomValues(bytes)
+      return [...bytes].map((byte) => byte.toString(16).padStart(2, '0')).join('')
+    }
+
+    function normalizeAddress(value) {
+      const trimmed = value.trim()
+      return /^bc1/i.test(trimmed) ? trimmed.toLowerCase() : trimmed
+    }
+
+    function actionLabel() {
+      return step === 'signature' ? 'Submit and check DATUM' : 'Continue to signature'
+    }
+
+    function showAddress() {
+      step = 'address'
+      proof = null
+      title.textContent = 'Step 1 of 2 — public wallet'
+      hint.textContent = 'Paste your public payout address. The same Mini App then shows the video and asks for the digital signature. After you submit the signature, the bot checks DATUM in the background.'
+      label.textContent = 'Public wallet address'
+      field.placeholder = 'Paste your public wallet address here'
+      field.value = ''
+      submit.textContent = actionLabel()
+      box.hidden = true
+      message.textContent = ''
+      if (guide) {
+        guide.pause()
+        guide.currentTime = 0
+      }
+    }
+
+    function showSignature(signText) {
+      step = 'signature'
+      title.textContent = 'Step 2 of 2 — digital signature'
+      hint.textContent = 'Copy the sign text into Sparrow or Shrike, paste the signature here, then tap Submit and check DATUM. The bot verifies in the background. You do not paste the signature in the chat.'
+      label.textContent = 'Digital signature'
+      field.placeholder = 'Paste your digital signature here'
+      field.value = ''
+      submit.textContent = actionLabel()
+      box.hidden = false
+      message.textContent = signText
+    }
+
+    showAddress()
+
+    tg?.ready()
+    tg?.expand()
+    hideNativeButtons()
+    setInterval(hideNativeButtons, 300)
+    field.focus()
+
+    copy.addEventListener('click', async (event) => {
+      event.preventDefault()
+      const text = message.textContent || ''
+      if (!text) return
+      try {
+        await navigator.clipboard.writeText(text)
+        copy.textContent = 'Copied'
+        setTimeout(() => { copy.textContent = 'Copy sign text' }, 1200)
+      } catch {
+        copy.textContent = 'Select the text above to copy'
+      }
+    })
+
+    function telegramUserId() {
+      return tg?.initDataUnsafe?.user?.id || params.get('uid') || null
+    }
+
+    function openedFromKeyboard() {
+      return typeof tg?.sendData === 'function' && !tg?.initDataUnsafe?.query_id
+    }
+
+    function pendingKey() {
+      return PENDING_PREFIX + (telegramUserId() || 'anon')
+    }
+
+    function savePending(payload) {
+      try { localStorage.setItem(pendingKey(), JSON.stringify(payload)) } catch { /* private mode */ }
+    }
+
+    function loadPending() {
+      try {
+        const exact = localStorage.getItem(pendingKey())
+        if (exact) return JSON.parse(exact)
+        for (let i = 0; i < localStorage.length; i += 1) {
+          const key = localStorage.key(i)
+          if (key && key.startsWith(PENDING_PREFIX)) return JSON.parse(localStorage.getItem(key))
+        }
+      } catch {
+        return null
+      }
+      return null
+    }
+
+    function clearPending() {
+      try {
+        for (let i = localStorage.length - 1; i >= 0; i -= 1) {
+          const key = localStorage.key(i)
+          if (key && key.startsWith(PENDING_PREFIX)) localStorage.removeItem(key)
+        }
+      } catch { /* ignore */ }
+    }
+
+    function restoreProof(payload) {
+      if (!payload?.address || !payload.nonce || !payload.issued) return
+      proof = { address: payload.address, nonce: payload.nonce, issued: payload.issued }
+      showSignature(challengeMessage(String(telegramUserId() || ''), payload.address, payload.nonce, payload.issued))
+      if (payload.signature) field.value = payload.signature
+    }
+
+    function showChecking() {
+      hideNativeButtons()
+      sendPanel.hidden = true
+      hint.textContent = 'Checking ownership and DATUM Gateway shares in the background…'
+      submit.textContent = 'Checking DATUM…'
+      submit.disabled = true
+    }
+
+    function showKeyboardSendHint() {
+      sending = false
+      submit.disabled = true
+      submit.textContent = 'Saved — tap the button under the chat'
+      hint.textContent = 'Telegram cannot send the DATUM pool check from the button on the message. Close this window, then tap Open DATUM verification under the chat. Your signature is saved and the bot will check DATUM Gateway shares automatically.'
+      const closeMiniApp = () => {
+        try { tg.close() } catch { /* stay open if Telegram blocks close */ }
+      }
+      try {
+        tg.showAlert('Your signature is saved. Close this window, then tap Open DATUM verification under the chat. The bot will check DATUM Gateway pools.', closeMiniApp)
+      } catch {
+        setTimeout(closeMiniApp, 1600)
+      }
+    }
+
+    function sendToBot(payload) {
+      hideNativeButtons()
+      const data = JSON.stringify(payload)
+      if (data.length > 4096) {
+        hint.textContent = 'That signature is too long for Telegram to send from the Mini App. Shorten the signed-message block to the base64 signature only.'
+        sending = false
+        return false
+      }
+      if (!openedFromKeyboard()) {
+        savePending(payload)
+        showKeyboardSendHint()
+        return false
+      }
+      try {
+        showChecking()
+        tg.sendData(data)
+        clearPending()
+        return true
+      } catch {
+        savePending(payload)
+        sending = false
+        submit.disabled = false
+        submit.textContent = actionLabel()
+        hint.textContent = 'Close this window and tap Open DATUM verification under the chat. The DATUM pool check will start automatically.'
+        return false
+      }
+    }
+
+    function submitForm() {
+      if (sending) return
+      const value = field.value.trim()
+      if (!value) {
+        hint.textContent = step === 'signature'
+          ? 'Paste the digital signature first, then tap Submit and check DATUM.'
+          : 'Paste the public wallet address first, then tap Continue to signature.'
+        field.focus()
+        return
+      }
+
+      if (step === 'address') {
+        if (value.includes('.')) {
+          hint.textContent = 'Do not include a .worker suffix. Paste only the public wallet address.'
+          return
+        }
+        const address = normalizeAddress(value)
+        const userId = telegramUserId()
+        if (!userId) {
+          hint.textContent = 'Open DATUM verification from the bot chat so the Mini App knows your Telegram user.'
+          field.focus()
+          return
+        }
+        const nonce = randomNonce()
+        const issued = new Date().toISOString()
+        proof = { address, nonce, issued }
+        showSignature(challengeMessage(String(userId), address, nonce, issued))
+        return
+      }
+
+      sending = true
+      if (!proof) {
+        sending = false
+        hint.textContent = 'Paste the public wallet first in this Mini App, then the signature.'
+        showAddress()
+        return
+      }
+      const payload = { type: 'proof', address: proof.address, signature: value.replace(/\s+/g, ''), nonce: proof.nonce, issued: proof.issued }
+      if (!sendToBot(payload)) sending = false
+    }
+
+    function resumePending() {
+      const pending = loadPending()
+      if (!pending || pending.type !== 'proof') return false
+      restoreProof(pending)
+      if (openedFromKeyboard()) {
+        sending = true
+        sendToBot(pending)
+        return true
+      }
+      hint.textContent = 'Your signature is saved. Close this window and tap Open DATUM verification under the chat to start the DATUM pool check.'
+      submit.disabled = true
+      submit.textContent = 'Saved — tap the button under the chat'
+      return true
+    }
+
+    copyProof.addEventListener('click', async (event) => {
+      event.preventDefault()
+      const text = fallback.textContent || ''
+      if (!text) return
+      try {
+        await navigator.clipboard.writeText(text)
+        copyProof.textContent = 'Copied'
+        setTimeout(() => { copyProof.textContent = 'Copy for the bot chat' }, 1200)
+      } catch {
+        copyProof.textContent = 'Select the text above to copy'
+      }
+    })
+
+    submit.addEventListener('click', (event) => {
+      event.preventDefault()
+      event.stopPropagation()
+      hideNativeButtons()
+      submitForm()
+    })
+
+    resumePending()
+  </script>
+</body>
+</html>

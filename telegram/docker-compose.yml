@@ -1,0 +1,17 @@
+services:
+  bot:
+    build: .
+    restart: unless-stopped
+    init: true
+    environment:
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID}
+      SCAN_INTERVAL_HOURS: ${SCAN_INTERVAL_HOURS:-24}
+      SHARE_MAX_AGE_HOURS: ${SHARE_MAX_AGE_HOURS:-24}
+      CONVOY_TREAT_ACTIVE_AS_DATUM: ${CONVOY_TREAT_ACTIVE_AS_DATUM:-true}
+      DATABASE_PATH: /data/bot.sqlite
+    volumes:
+      - bot-data:/data
+
+volumes:
+  bot-data:
