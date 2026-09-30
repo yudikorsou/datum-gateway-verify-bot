@@ -186,10 +186,11 @@ const PAGE = `<!DOCTYPE html>
     header { display: flex; gap: 16px; align-items: center; margin-bottom: 28px; }
     .mark {
       width: 56px; height: 56px; border-radius: 16px;
-      background: linear-gradient(160deg, #f5a623, #c67800);
-      display: grid; place-items: center; font-weight: 800; color: #1a1204;
-      box-shadow: 0 10px 30px rgba(245, 166, 35, 0.25);
+      overflow: hidden;
+      background: #fff;
+      box-shadow: 0 10px 30px rgba(245, 166, 35, 0.18);
     }
+    .mark img { width: 100%; height: 100%; display: block; }
     h1 { margin: 0; font-size: 28px; letter-spacing: -0.03em; }
     .tagline { margin: 4px 0 0; color: var(--muted); }
     .banner {
@@ -256,7 +257,7 @@ const PAGE = `<!DOCTYPE html>
 <body>
   <main>
     <header>
-      <div class="mark">DV</div>
+      <div class="mark"><img src="/icon.png" alt="DATUMVerified"></div>
       <div>
         <h1>DATUMVerified</h1>
         <p class="tagline">Run Discord and Telegram DATUM Gateway verify bots on this Umbrel.</p>
@@ -402,6 +403,14 @@ const server = http.createServer(async (request, response) => {
   try {
     if (request.method === 'GET' && (url.pathname === '/' || url.pathname === '/index.html')) {
       return send(response, 200, PAGE, 'text/html; charset=utf-8')
+    }
+    if (request.method === 'GET' && url.pathname === '/icon.png') {
+      const icon = fs.readFileSync(path.join(import.meta.dirname, 'icon.png'))
+      response.writeHead(200, {
+        'content-type': 'image/png',
+        'cache-control': 'public, max-age=86400',
+      })
+      return response.end(icon)
     }
     if (request.method === 'GET' && url.pathname === '/health') {
       return send(response, 200, { ok: true })
