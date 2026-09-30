@@ -32,7 +32,7 @@ async function onReady() {
   console.log(`logged in as ${client.user.tag}`)
   try {
     await registerCommands(config)
-    console.log(`commands registered in guild ${config.guildId}`)
+    console.log(`commands registered in ${config.guilds.length} guild(s)`)
   } catch (error) {
     console.error('command registration failed', error)
   }

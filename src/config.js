@@ -46,17 +46,63 @@ function boolEnv(name, fallback) {
   throw new Error(`${name} must be true or false`)
 }
 
+function parseJsonList(raw) {
+  if (raw === undefined || raw === null || String(raw).trim() === '') return null
+  const text = String(raw).trim()
+  try {
+    return JSON.parse(text)
+  } catch {
+    throw new Error('DISCORD_COMMUNITIES must be a JSON array of { guildId, roleId } objects.')
+  }
+}
+
+export function normalizeGuilds(env = process.env) {
+  const fromJson = parseJsonList(env.DISCORD_COMMUNITIES)
+  const guilds = []
+  if (Array.isArray(fromJson)) {
+    for (const entry of fromJson) {
+      const guildId = String(entry?.guildId || entry?.guild_id || '').trim()
+      const roleId = String(entry?.roleId || entry?.role_id || '').trim()
+      if (!guildId || !roleId) continue
+      if (guilds.some((item) => item.guildId === guildId)) continue
+      guilds.push({ guildId, roleId })
+    }
+  }
+  const legacyGuild = String(env.DISCORD_GUILD_ID || '').trim()
+  const legacyRole = String(env.VERIFIED_ROLE_ID || '').trim()
+  if (legacyGuild && legacyRole && !guilds.some((item) => item.guildId === legacyGuild)) {
+    guilds.unshift({ guildId: legacyGuild, roleId: legacyRole })
+  }
+  return guilds
+}
+
 export function readConfig() {
   loadEnvFile()
+  const guilds = normalizeGuilds()
+  if (!guilds.length) {
+    throw new Error(
+      'Missing Discord communities. Set DISCORD_GUILD_ID and VERIFIED_ROLE_ID, or DISCORD_COMMUNITIES as a JSON array.',
+    )
+  }
   return {
     token: required('DISCORD_TOKEN'),
     clientId: required('DISCORD_CLIENT_ID'),
-    guildId: required('DISCORD_GUILD_ID'),
-    roleId: required('VERIFIED_ROLE_ID'),
+    guilds,
+    guildId: guilds[0].guildId,
+    roleId: guilds[0].roleId,
     scanIntervalHours: numberEnv('SCAN_INTERVAL_HOURS', 24),
     shareMaxAgeHours: numberEnv('SHARE_MAX_AGE_HOURS', 24),
     convoyTreatActiveAsDatum: boolEnv('CONVOY_TREAT_ACTIVE_AS_DATUM', true),
     databasePath: process.env.DATABASE_PATH || './data/bot.sqlite',
     challengeMinutes: 30,
   }
+}
+
+export function guildEntry(config, guildId) {
+  if (!guildId) return null
+  return config.guilds.find((entry) => entry.guildId === String(guildId)) || null
+}
+
+export function configuredGuildIds(config) {
+  return config.guilds.map((entry) => entry.guildId)
 }

@@ -3,13 +3,15 @@ import { setTimeout as sleep } from 'node:timers/promises'
 
 export function settingsReady(env, platform) {
   if (platform === 'discord') {
-    return (
-      env.DISCORD_ENABLED === '1' &&
-      Boolean(env.DISCORD_TOKEN) &&
-      Boolean(env.DISCORD_CLIENT_ID) &&
-      Boolean(env.DISCORD_GUILD_ID) &&
-      Boolean(env.VERIFIED_ROLE_ID)
-    )
+    if (env.DISCORD_ENABLED !== '1') return false
+    if (!env.DISCORD_TOKEN || !env.DISCORD_CLIENT_ID) return false
+    if (env.DISCORD_GUILD_ID && env.VERIFIED_ROLE_ID) return true
+    try {
+      const communities = JSON.parse(env.DISCORD_COMMUNITIES || '[]')
+      return Array.isArray(communities) && communities.some((entry) => entry?.guildId && entry?.roleId)
+    } catch {
+      return false
+    }
   }
   if (platform === 'telegram') {
     return env.TELEGRAM_ENABLED === '1' && Boolean(env.TELEGRAM_BOT_TOKEN)

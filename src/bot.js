@@ -23,7 +23,15 @@ import {
 } from './db.js'
 import { challengeContent, challengeEmbed, copySignTextModal, copyableSignTextDm, optionsRow, restoreResultEmbed, resultEmbed, signatureRow, startRow, statusEmbed } from './present.js'
 import { loadSharedSnapshots, scanAddress, summarizeScan } from './pools/scan.js'
-import { grantRole, isUnknownMember, memberRoleState, revokeRole, roleErrorText } from './roles.js'
+import { guildEntry } from './config.js'
+import {
+  anyMemberRoleState,
+  grantRole,
+  grantRolesInCommunities,
+  isUnknownMember,
+  revokeRolesInCommunities,
+  roleErrorText,
+} from './roles.js'
 import { explainerFiles } from './explainer.js'
 import { verifyOwnership } from './signature.js'
 import { linkedAddress, restoreDecision, verifyEntry } from './verify-step.js'
@@ -81,10 +89,12 @@ export async function registerCommands(config) {
     integration_types: [0, 1],
     contexts: [0, 1, 2],
   }))
-  await rest.put(
-    Routes.applicationGuildCommands(config.clientId, config.guildId),
-    { body: guildBody },
-  )
+  for (const community of config.guilds) {
+    await rest.put(
+      Routes.applicationGuildCommands(config.clientId, community.guildId),
+      { body: guildBody },
+    )
+  }
   await rest.put(Routes.applicationCommands(config.clientId), { body: globalBody })
 }
 
@@ -103,11 +113,18 @@ function overwriteErrorText(error) {
   return error?.rawError?.message || error?.message || String(error)
 }
 
-export async function ensureGuildPermissions(config) {
+export async function ensureGuildPermissions(config, community = null) {
+  const targets = community ? [community] : config.guilds
+  for (const entry of targets) {
+    await ensureOneGuildPermissions(config, entry)
+  }
+}
+
+async function ensureOneGuildPermissions(config, community) {
   const rest = new REST({ version: '10' }).setToken(config.token)
-  const roles = await rest.get(Routes.guildRoles(config.guildId))
-  const member = await rest.get(Routes.guildMember(config.guildId, config.clientId))
-  const everyone = roles.find((role) => role.id === config.guildId)
+  const roles = await rest.get(Routes.guildRoles(community.guildId))
+  const member = await rest.get(Routes.guildMember(community.guildId, config.clientId))
+  const everyone = roles.find((role) => role.id === community.guildId)
   const botRoles = roles.filter((role) => member.roles.includes(role.id))
   const highestBotRole = botRoles.reduce((best, role) => {
     if (!best || role.position > best.position) return role
@@ -116,19 +133,19 @@ export async function ensureGuildPermissions(config) {
   const capableRole = botRoles.find((role) => roleHas(role, SEND_MESSAGES) && roleHas(role, USE_APPLICATION_COMMANDS))
   if (highestBotRole && capableRole && highestBotRole.id !== capableRole.id) {
     console.error(
-      `Move the "${capableRole.name}" role above "${highestBotRole.name}" in Server Settings → Roles, then restart. The higher role needs Send Messages so it can grant the miner role.`,
+      `Guild ${community.guildId}: move the "${capableRole.name}" role above "${highestBotRole.name}" in Server Settings → Roles, then restart. The higher role needs Send Messages so it can grant the miner role.`,
     )
   }
   const everyonePerms = BigInt(everyone.permissions)
   if (!(everyonePerms & USE_APPLICATION_COMMANDS) && highestBotRole && roleHas(highestBotRole, USE_APPLICATION_COMMANDS)) {
-    await rest.patch(Routes.guildRole(config.guildId, everyone.id), {
+    await rest.patch(Routes.guildRole(community.guildId, everyone.id), {
       body: { permissions: String(everyonePerms | USE_APPLICATION_COMMANDS) },
     })
-    console.log('enabled Use Application Commands for @everyone')
+    console.log(`enabled Use Application Commands for @everyone in guild ${community.guildId}`)
   }
   const overwriteRole = capableRole || highestBotRole
   if (!overwriteRole) return
-  const channels = await rest.get(Routes.guildChannels(config.guildId))
+  const channels = await rest.get(Routes.guildChannels(community.guildId))
   const allow = String(VIEW_CHANNEL | SEND_MESSAGES | EMBED_LINKS | READ_MESSAGE_HISTORY | USE_APPLICATION_COMMANDS)
   for (const channel of channels) {
     if (shouldSkipChannelOverwrite(channel)) continue
@@ -137,14 +154,31 @@ export async function ensureGuildPermissions(config) {
         body: { type: 0, allow, deny: '0' },
       })
     } catch (error) {
-      console.error(`could not update #${channel.name} permissions: ${overwriteErrorText(error)}`)
+      console.error(`could not update #${channel.name} in ${community.guildId}: ${overwriteErrorText(error)}`)
     }
   }
-  console.log('locked channels such as #gateway keep their overwrites; /verify stays ephemeral there')
+  console.log(`guild ${community.guildId}: locked channels keep their overwrites; /verify stays ephemeral there`)
 }
 
 function inAllowedPlace(interaction, config) {
-  return !interaction.guildId || interaction.guildId === config.guildId
+  if (!interaction.guildId) return true
+  return Boolean(guildEntry(config, interaction.guildId))
+}
+
+async function grantVerifiedRoles(client, config, userId, preferredGuildId = null) {
+  const preferred = guildEntry(config, preferredGuildId)
+  if (preferred) {
+    try {
+      await grantRole(client, preferred, userId)
+    } catch (error) {
+      if (!isUnknownMember(error)) throw error
+    }
+  }
+  return grantRolesInCommunities(client, config, userId)
+}
+
+async function revokeVerifiedRoles(client, config, userId) {
+  return revokeRolesInCommunities(client, config, userId)
 }
 
 async function respondPrivately(interaction, payload) {
@@ -298,7 +332,7 @@ export function createInteractionHandler({ client, db, config }) {
     try {
       if (!inAllowedPlace(interaction, config)) {
         if (interaction.isRepliable()) {
-          await respondPrivately(interaction, 'Verification only runs in the configured server, or in a DM with this bot.')
+          await respondPrivately(interaction, 'Verification only runs in a configured Discord server, or in a DM with this bot.')
         }
         return
       }
@@ -359,7 +393,7 @@ async function replyWithChallenge(interaction, db, config, info) {
 
 async function continueAfterAddress(interaction, client, db, config, info) {
   const miner = getMiner(db, interaction.user.id)
-  const membership = await memberRoleState(client, config, interaction.user.id)
+  const membership = await anyMemberRoleState(client, config, interaction.user.id, interaction.guildId)
   const step = verifyEntry({
     miner,
     challenge: getChallenge(db, interaction.user.id),
@@ -386,7 +420,7 @@ async function onVerify(interaction, client, db, config) {
     await continueAfterAddress(interaction, client, db, config, info)
     return
   }
-  const membership = await memberRoleState(client, config, interaction.user.id)
+  const membership = await anyMemberRoleState(client, config, interaction.user.id, interaction.guildId)
   const step = verifyEntry({ miner, challenge, hasRole: membership.hasRole })
   if (step === 'menu') {
     const address = linkedAddress(miner, challenge)
@@ -497,7 +531,7 @@ async function onRestore(interaction, client, db, config) {
   if (decision !== 'grant') {
     if (decision === 'deny') {
       try {
-        await revokeRole(client, config, interaction.user.id)
+        await revokeVerifiedRoles(client, config, interaction.user.id)
       } catch (error) {
         if (!isUnknownMember(error)) {
           await interaction.editReply(roleErrorText(error))
@@ -520,7 +554,7 @@ async function onRestore(interaction, client, db, config) {
     return
   }
   try {
-    await grantRole(client, config, interaction.user.id)
+    await grantVerifiedRoles(client, config, interaction.user.id, interaction.guildId)
   } catch (error) {
     if (isUnknownMember(error)) {
       recordScan(db, interaction.user.id, { roleGranted: false, scannedAt: Date.now(), scan })
@@ -593,7 +627,7 @@ async function onSignatureModal(interaction, client, db, config) {
   let roleGranted = false
   let roleNote = null
   try {
-    await grantRole(client, config, interaction.user.id)
+    await grantVerifiedRoles(client, config, interaction.user.id, interaction.guildId)
     roleGranted = true
   } catch (error) {
     if (isUnknownMember(error)) {
@@ -647,7 +681,7 @@ async function onUnlink(interaction, client, db, config) {
   }
   await interaction.deferReply(EPHEMERAL)
   try {
-    await revokeRole(client, config, interaction.user.id)
+    await revokeVerifiedRoles(client, config, interaction.user.id)
   } catch (error) {
     await interaction.editReply(roleErrorText(error))
     return
@@ -677,13 +711,13 @@ export async function rescanMiners(client, db, config) {
       const scannedAt = Date.now()
       if (scan.activeDatum) {
         try {
-          await grantRole(client, config, miner.discordId)
+          await grantVerifiedRoles(client, config, miner.discordId)
           recordScan(db, miner.discordId, { roleGranted: true, scannedAt, scan })
           console.log(`daily scan: kept ${miner.discordId}`)
         } catch (error) {
           if (isUnknownMember(error)) {
             recordScan(db, miner.discordId, { roleGranted: false, scannedAt, scan })
-            console.log(`daily scan: ${miner.discordId} is not in the server; /verify will issue a new message after they rejoin`)
+            console.log(`daily scan: ${miner.discordId} is not in any configured server; /verify will issue a new message after they rejoin`)
           } else {
             console.error(`daily scan: role grant failed for ${miner.discordId}`, error.message)
             recordScan(db, miner.discordId, { roleGranted: Boolean(miner.roleGranted), scannedAt, scan })
@@ -693,7 +727,7 @@ export async function rescanMiners(client, db, config) {
         recordScan(db, miner.discordId, { roleGranted: Boolean(miner.roleGranted), scannedAt, scan })
         console.log(`daily scan: skipped ${miner.discordId} because a pool did not answer`)
       } else {
-        await revokeRole(client, config, miner.discordId)
+        await revokeVerifiedRoles(client, config, miner.discordId)
         recordScan(db, miner.discordId, { roleGranted: false, scannedAt, scan })
         console.log(`daily scan: removed role from ${miner.discordId}`)
         try {

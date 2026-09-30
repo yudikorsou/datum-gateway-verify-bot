@@ -14,9 +14,11 @@ const DEFAULTS = {
   DISCORD_CLIENT_ID: '',
   DISCORD_GUILD_ID: '',
   VERIFIED_ROLE_ID: '',
+  DISCORD_COMMUNITIES: '[]',
   TELEGRAM_ENABLED: '0',
   TELEGRAM_BOT_TOKEN: '',
   TELEGRAM_CHAT_ID: '',
+  TELEGRAM_CHAT_IDS: '[]',
   WEBAPP_URL: DEFAULT_WEBAPP,
   SCAN_INTERVAL_HOURS: '24',
   SHARE_MAX_AGE_HOURS: '24',
@@ -53,11 +55,67 @@ function maskSecret(value) {
   return `${text.slice(0, 4)}…${text.slice(-4)}`
 }
 
+function parseDiscordCommunities(settings) {
+  const list = []
+  try {
+    const parsed = JSON.parse(settings.DISCORD_COMMUNITIES || '[]')
+    if (Array.isArray(parsed)) {
+      for (const entry of parsed) {
+        const guildId = String(entry?.guildId || '').trim()
+        const roleId = String(entry?.roleId || '').trim()
+        if (guildId && roleId && !list.some((item) => item.guildId === guildId)) {
+          list.push({ guildId, roleId })
+        }
+      }
+    }
+  } catch {
+    // Fall back to legacy fields below.
+  }
+  const legacyGuild = String(settings.DISCORD_GUILD_ID || '').trim()
+  const legacyRole = String(settings.VERIFIED_ROLE_ID || '').trim()
+  if (legacyGuild && legacyRole && !list.some((item) => item.guildId === legacyGuild)) {
+    list.unshift({ guildId: legacyGuild, roleId: legacyRole })
+  }
+  return list.length ? list : [{ guildId: '', roleId: '' }]
+}
+
+function parseTelegramChatIds(settings) {
+  const ids = []
+  try {
+    const parsed = JSON.parse(settings.TELEGRAM_CHAT_IDS || '[]')
+    if (Array.isArray(parsed)) {
+      for (const value of parsed) {
+        const id = String(value || '').trim()
+        if (id && !ids.includes(id)) ids.push(id)
+      }
+    }
+  } catch {
+    // Fall back to legacy field below.
+  }
+  const legacy = String(settings.TELEGRAM_CHAT_ID || '').trim()
+  if (legacy && !ids.includes(legacy)) ids.unshift(legacy)
+  return ids.length ? ids : ['']
+}
+
+function normalizeCommunityFields(next) {
+  const guilds = parseDiscordCommunities(next).filter((entry) => entry.guildId && entry.roleId)
+  next.DISCORD_COMMUNITIES = JSON.stringify(guilds)
+  next.DISCORD_GUILD_ID = guilds[0]?.guildId || ''
+  next.VERIFIED_ROLE_ID = guilds[0]?.roleId || ''
+  const chats = parseTelegramChatIds(next).filter(Boolean)
+  next.TELEGRAM_CHAT_IDS = JSON.stringify(chats)
+  next.TELEGRAM_CHAT_ID = chats[0] || ''
+  return next
+}
+
 function publicSettings(settings) {
-  const out = { ...settings }
+  const normalized = normalizeCommunityFields({ ...settings })
+  const out = { ...normalized }
   for (const key of SECRET_KEYS) out[key] = maskSecret(settings[key])
   out.discordTokenSet = Boolean(settings.DISCORD_TOKEN)
   out.telegramTokenSet = Boolean(settings.TELEGRAM_BOT_TOKEN)
+  out.discordCommunities = parseDiscordCommunities(normalized)
+  out.telegramChatIds = parseTelegramChatIds(normalized)
   if (settings.DISCORD_CLIENT_ID) {
     const params = new URLSearchParams({
       client_id: settings.DISCORD_CLIENT_ID,
@@ -114,16 +172,32 @@ function mergeSettings(current, incoming) {
     if (value === true) value = 'true'
     if (value === false) value = 'false'
     if (value === undefined || value === null) continue
+    if (Array.isArray(value) || typeof value === 'object') value = JSON.stringify(value)
     value = String(value).trim()
     if (SECRET_KEYS.has(key) && (!value || value.includes('…') || value === '••••')) continue
     if (key.endsWith('_ENABLED')) next[key] = value === '1' || value === 'true' || value === 'on' ? '1' : '0'
     else next[key] = value
   }
+  if (Array.isArray(incoming.discordCommunities)) {
+    next.DISCORD_COMMUNITIES = JSON.stringify(
+      incoming.discordCommunities
+        .map((entry) => ({
+          guildId: String(entry?.guildId || '').trim(),
+          roleId: String(entry?.roleId || '').trim(),
+        }))
+        .filter((entry) => entry.guildId && entry.roleId),
+    )
+  }
+  if (Array.isArray(incoming.telegramChatIds)) {
+    next.TELEGRAM_CHAT_IDS = JSON.stringify(
+      incoming.telegramChatIds.map((value) => String(value || '').trim()).filter(Boolean),
+    )
+  }
   if (!next.WEBAPP_URL) next.WEBAPP_URL = DEFAULT_WEBAPP
   if (!next.SCAN_INTERVAL_HOURS) next.SCAN_INTERVAL_HOURS = '24'
   if (!next.SHARE_MAX_AGE_HOURS) next.SHARE_MAX_AGE_HOURS = '24'
   if (next.CONVOY_TREAT_ACTIVE_AS_DATUM !== 'false') next.CONVOY_TREAT_ACTIVE_AS_DATUM = 'true'
-  return next
+  return normalizeCommunityFields(next)
 }
 
 function send(response, status, body, type = 'application/json; charset=utf-8') {
@@ -235,6 +309,28 @@ const PAGE = `<!DOCTYPE html>
     .status.ok { color: var(--ok); }
     .status.bad { color: var(--bad); }
     .actions { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 22px; }
+    .community-list { display: grid; gap: 12px; margin-top: 8px; }
+    .community-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr auto;
+      gap: 10px;
+      align-items: end;
+    }
+    .community-row.single { grid-template-columns: 1fr auto; }
+    .community-row button {
+      padding: 11px 14px;
+      background: transparent;
+      color: var(--muted);
+      border: 1px solid var(--line);
+      font-weight: 600;
+    }
+    button.add {
+      margin-top: 12px;
+      background: transparent;
+      color: var(--text);
+      border: 1px dashed var(--line);
+      font-weight: 600;
+    }
     button {
       appearance: none;
       border: 0;
@@ -270,21 +366,14 @@ const PAGE = `<!DOCTYPE html>
           <input id="DISCORD_ENABLED" name="DISCORD_ENABLED" type="checkbox">
           <h2>Discord</h2>
         </div>
-        <p class="hint">Create a bot in the Discord Developer Portal, invite it with Manage Roles, and put the miner role below the bot role.</p>
+        <p class="hint">Create one Discord bot, invite it to every server you want to verify, and add each server plus its verified role below. One miner proof unlocks all of them.</p>
         <label>Bot token</label>
         <input id="DISCORD_TOKEN" name="DISCORD_TOKEN" type="password" autocomplete="off" placeholder="Paste the Discord bot token">
-        <div class="row">
-          <div>
-            <label>Application ID</label>
-            <input id="DISCORD_CLIENT_ID" name="DISCORD_CLIENT_ID" placeholder="Client ID">
-          </div>
-          <div>
-            <label>Server ID</label>
-            <input id="DISCORD_GUILD_ID" name="DISCORD_GUILD_ID" placeholder="Guild ID">
-          </div>
-        </div>
-        <label>Verified role ID</label>
-        <input id="VERIFIED_ROLE_ID" name="VERIFIED_ROLE_ID" placeholder="Role granted after DATUM checks pass">
+        <label>Application ID</label>
+        <input id="DISCORD_CLIENT_ID" name="DISCORD_CLIENT_ID" placeholder="Client ID">
+        <label>Discord communities</label>
+        <div id="discordCommunities" class="community-list"></div>
+        <button type="button" class="add" id="addDiscordCommunity">Add another Discord server</button>
         <p class="status" id="discordStatus">Discord is waiting for settings.</p>
         <p id="discordInvite"></p>
       </section>
@@ -293,11 +382,12 @@ const PAGE = `<!DOCTYPE html>
           <input id="TELEGRAM_ENABLED" name="TELEGRAM_ENABLED" type="checkbox">
           <h2>Telegram</h2>
         </div>
-        <p class="hint">Create a bot with BotFather, add it to your community as admin with Invite users and Ban users, then paste the chat id.</p>
+        <p class="hint">Create one Telegram bot, add it as admin to every community, send /chatid in each, and paste those chat ids below. One miner proof unlocks all of them.</p>
         <label>Bot token</label>
         <input id="TELEGRAM_BOT_TOKEN" name="TELEGRAM_BOT_TOKEN" type="password" autocomplete="off" placeholder="Paste the BotFather token">
-        <label>Community chat ID</label>
-        <input id="TELEGRAM_CHAT_ID" name="TELEGRAM_CHAT_ID" placeholder="-100…  You can save the token first, then send /chatid in the group">
+        <label>Telegram communities</label>
+        <div id="telegramCommunities" class="community-list"></div>
+        <button type="button" class="add" id="addTelegramCommunity">Add another Telegram community</button>
         <label>Mini App URL</label>
         <input id="WEBAPP_URL" name="WEBAPP_URL">
         <p class="status" id="telegramStatus">Telegram is waiting for settings.</p>
@@ -324,9 +414,9 @@ const PAGE = `<!DOCTYPE html>
         <h2>First-run checklist</h2>
         <ol>
           <li>Enable Discord, Telegram, or both, then save.</li>
-          <li>Invite the Discord bot and keep its role above the verified role.</li>
-          <li>Add the Telegram bot to the community, send <code>/chatid</code>, paste that id, and save again.</li>
-          <li>Members run <code>/verify</code> in Discord or Telegram. They stay on your Umbrel after that.</li>
+          <li>Invite the same Discord bot into every server and keep its role above each verified role.</li>
+          <li>Add the same Telegram bot to each community, send <code>/chatid</code>, and add every id below.</li>
+          <li>Members verify once. The bots grant access in all configured communities on this Umbrel.</li>
         </ol>
         <div class="actions">
           <button type="submit">Save and start bots</button>
@@ -338,9 +428,75 @@ const PAGE = `<!DOCTYPE html>
   </main>
   <script>
     const fields = [
-      'DISCORD_TOKEN','DISCORD_CLIENT_ID','DISCORD_GUILD_ID','VERIFIED_ROLE_ID',
-      'TELEGRAM_BOT_TOKEN','TELEGRAM_CHAT_ID','WEBAPP_URL','SCAN_INTERVAL_HOURS','SHARE_MAX_AGE_HOURS'
+      'DISCORD_TOKEN','DISCORD_CLIENT_ID',
+      'TELEGRAM_BOT_TOKEN','WEBAPP_URL','SCAN_INTERVAL_HOURS','SHARE_MAX_AGE_HOURS'
     ]
+    function discordRow(entry = { guildId: '', roleId: '' }) {
+      const row = document.createElement('div')
+      row.className = 'community-row'
+      row.innerHTML = \`
+        <div>
+          <label>Server ID</label>
+          <input class="guild-id" placeholder="Guild ID" value="\${entry.guildId || ''}">
+        </div>
+        <div>
+          <label>Verified role ID</label>
+          <input class="role-id" placeholder="Role ID" value="\${entry.roleId || ''}">
+        </div>
+        <button type="button" class="remove">Remove</button>
+      \`
+      row.querySelector('.remove').addEventListener('click', () => {
+        const list = document.getElementById('discordCommunities')
+        if (list.children.length <= 1) {
+          row.querySelector('.guild-id').value = ''
+          row.querySelector('.role-id').value = ''
+          return
+        }
+        row.remove()
+      })
+      return row
+    }
+    function telegramRow(value = '') {
+      const row = document.createElement('div')
+      row.className = 'community-row single'
+      row.innerHTML = \`
+        <div>
+          <label>Community chat ID</label>
+          <input class="chat-id" placeholder="-100…" value="\${value || ''}">
+        </div>
+        <button type="button" class="remove">Remove</button>
+      \`
+      row.querySelector('.remove').addEventListener('click', () => {
+        const list = document.getElementById('telegramCommunities')
+        if (list.children.length <= 1) {
+          row.querySelector('.chat-id').value = ''
+          return
+        }
+        row.remove()
+      })
+      return row
+    }
+    function renderCommunities(settings) {
+      const discord = document.getElementById('discordCommunities')
+      const telegram = document.getElementById('telegramCommunities')
+      discord.innerHTML = ''
+      telegram.innerHTML = ''
+      for (const entry of settings.discordCommunities || [{ guildId: '', roleId: '' }]) {
+        discord.appendChild(discordRow(entry))
+      }
+      for (const chatId of settings.telegramChatIds || ['']) {
+        telegram.appendChild(telegramRow(chatId))
+      }
+    }
+    function collectDiscordCommunities() {
+      return [...document.querySelectorAll('#discordCommunities .community-row')].map((row) => ({
+        guildId: row.querySelector('.guild-id').value.trim(),
+        roleId: row.querySelector('.role-id').value.trim(),
+      }))
+    }
+    function collectTelegramChatIds() {
+      return [...document.querySelectorAll('#telegramCommunities .chat-id')].map((input) => input.value.trim())
+    }
     async function load() {
       const response = await fetch('/api/status')
       const data = await response.json()
@@ -356,23 +512,34 @@ const PAGE = `<!DOCTYPE html>
           el.value = data.settings[key] || ''
         }
       }
+      renderCommunities(data.settings)
       const discord = document.getElementById('discordStatus')
-      discord.textContent = data.discord.detail
+      const guildCount = (data.settings.discordCommunities || []).filter((entry) => entry.guildId && entry.roleId).length
+      discord.textContent = data.discord.detail + (guildCount ? \` · \${guildCount} server\${guildCount === 1 ? '' : 's'}\` : '')
       discord.className = 'status ' + (data.discord.ok ? 'ok' : 'bad')
       const telegram = document.getElementById('telegramStatus')
-      telegram.textContent = data.telegram.detail
+      const chatCount = (data.settings.telegramChatIds || []).filter(Boolean).length
+      telegram.textContent = data.telegram.detail + (chatCount ? \` · \${chatCount} Telegram chat\${chatCount === 1 ? '' : 's'}\` : '')
       telegram.className = 'status ' + (data.telegram.ok ? 'ok' : 'bad')
       const invite = document.getElementById('discordInvite')
       invite.innerHTML = data.settings.discordInviteUrl
         ? '<a href="' + data.settings.discordInviteUrl + '" target="_blank" rel="noreferrer">Open Discord invite link</a>'
         : ''
     }
+    document.getElementById('addDiscordCommunity').addEventListener('click', () => {
+      document.getElementById('discordCommunities').appendChild(discordRow())
+    })
+    document.getElementById('addTelegramCommunity').addEventListener('click', () => {
+      document.getElementById('telegramCommunities').appendChild(telegramRow())
+    })
     document.getElementById('form').addEventListener('submit', async (event) => {
       event.preventDefault()
       const body = {
         DISCORD_ENABLED: document.getElementById('DISCORD_ENABLED').checked ? '1' : '0',
         TELEGRAM_ENABLED: document.getElementById('TELEGRAM_ENABLED').checked ? '1' : '0',
         CONVOY_TREAT_ACTIVE_AS_DATUM: document.getElementById('CONVOY_TREAT_ACTIVE_AS_DATUM').checked ? 'true' : 'false',
+        discordCommunities: collectDiscordCommunities(),
+        telegramChatIds: collectTelegramChatIds(),
       }
       for (const key of fields) body[key] = document.getElementById(key).value
       const response = await fetch('/api/settings', {

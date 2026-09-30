@@ -7,11 +7,11 @@ Discord bot for miners who build their own block templates with [DATUM Gateway](
 
 Every 24 hours the bot checks again. The role stays while a pool still shows fresh DATUM shares. The role is removed only when every pool answers and none of them do. A pool that is down does not strip the role.
 
-Anyone can run a copy on their own Discord server. The bot token, server id, and role id stay in a local `.env` file and are never committed.
+Anyone can run a copy on their own Discord server. The bot token, server id, and role id stay in a local `.env` file and are never committed. One Discord bot can cover several servers: set `DISCORD_COMMUNITIES` to a JSON list of `{ guildId, roleId }`, invite the same bot into each server, and members verify once.
 
 ## Run on Umbrel
 
-Install **DATUMVerified** from the Umbrel App Store, or add the community store `https://github.com/yudikorsou/datumverified-umbrel-app-store` under **App Store → Community App Stores**. Open the app, paste your Discord and/or Telegram bot tokens, and the bots run 24/7 on that homeserver.
+Install **DATUMVerified** from the Umbrel App Store, or add the community store `https://github.com/yudikorsou/datumverified-umbrel-app-store` under **App Store → Community App Stores**. Open the app, paste your Discord and/or Telegram bot tokens, and add every community you want to verify. The bots run 24/7 on that homeserver.
 
 Portainer remains supported for the original stack: [deploy/umbrel/README.md](deploy/umbrel/README.md).
 
