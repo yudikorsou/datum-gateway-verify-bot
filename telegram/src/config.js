@@ -79,7 +79,7 @@ export function readConfig() {
     convoyTreatActiveAsDatum: boolEnv('CONVOY_TREAT_ACTIVE_AS_DATUM', true),
     databasePath: process.env.DATABASE_PATH || './data/bot.sqlite',
     challengeMinutes: 30,
-    webAppUrl: (process.env.WEBAPP_URL || 'https://yudikorsou.github.io/datum-gateway-telegram-verify-bot/').trim(),
+    webAppUrl: (process.env.WEBAPP_URL || 'https://yudikorsou.github.io/datum-gateway-verify-bot/').trim(),
   }
 }
 

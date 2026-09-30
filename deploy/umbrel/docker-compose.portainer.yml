@@ -17,7 +17,7 @@ services:
     volumes:
       - discord-data:/data
   telegram:
-    image: ghcr.io/yudikorsou/datum-gateway-telegram-verify-bot:latest
+    image: ghcr.io/yudikorsou/datum-gateway-verify-telegram:latest
     pull_policy: always
     restart: unless-stopped
     init: true

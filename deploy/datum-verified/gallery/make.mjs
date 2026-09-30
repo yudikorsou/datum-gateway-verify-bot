@@ -23,7 +23,7 @@ const DEMO = {
     TELEGRAM_ENABLED: '1',
     TELEGRAM_BOT_TOKEN: '••••saved',
     TELEGRAM_CHAT_ID: '-1001987654321',
-    WEBAPP_URL: 'https://yudikorsou.github.io/datum-gateway-telegram-verify-bot/',
+    WEBAPP_URL: 'https://yudikorsou.github.io/datum-gateway-verify-bot/',
     SCAN_INTERVAL_HOURS: '24',
     SHARE_MAX_AGE_HOURS: '24',
     CONVOY_TREAT_ACTIVE_AS_DATUM: 'true',

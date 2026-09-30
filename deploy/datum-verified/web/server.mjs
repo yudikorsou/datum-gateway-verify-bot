@@ -5,7 +5,7 @@ import path from 'node:path'
 const DATA_DIR = process.env.DATA_DIR || '/data'
 const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json')
 const PORT = Number(process.env.PORT || 8080)
-const DEFAULT_WEBAPP = 'https://yudikorsou.github.io/datum-gateway-telegram-verify-bot/'
+const DEFAULT_WEBAPP = 'https://yudikorsou.github.io/datum-gateway-verify-bot/'
 const DISCORD_INVITE_PERMISSIONS = '2415996096'
 
 const DEFAULTS = {

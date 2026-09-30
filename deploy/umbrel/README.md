@@ -21,7 +21,7 @@ Stop `npm start` on your Mac first. Each bot token can only be logged in once.
 GitHub builds these images from this repo on every push to `main`:
 
 - `ghcr.io/yudikorsou/datum-gateway-verify-bot:latest` (Discord, repo root)
-- `ghcr.io/yudikorsou/datum-gateway-telegram-verify-bot:latest` (Telegram, `telegram/`)
+- `ghcr.io/yudikorsou/datum-gateway-verify-telegram:latest` (Telegram, `telegram/`)
 
 Open each package on GitHub and set visibility to **Public** the first time (Packages → the image → Package settings → Change visibility).
 

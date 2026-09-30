@@ -33,5 +33,5 @@ jobs:
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |
-            ghcr.io/yudikorsou/datum-gateway-telegram-verify-bot:latest
-            ghcr.io/yudikorsou/datum-gateway-telegram-verify-bot:${{ github.sha }}
+            ghcr.io/yudikorsou/datum-gateway-verify-telegram:latest
+            ghcr.io/yudikorsou/datum-gateway-verify-telegram:${{ github.sha }}

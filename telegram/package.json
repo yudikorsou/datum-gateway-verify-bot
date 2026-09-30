@@ -1,5 +1,5 @@
 {
-  "name": "datum-gateway-telegram-verify-bot",
+  "name": "datum-gateway-verify-telegram",
   "version": "1.0.0",
   "type": "module",
   "description": "Telegram bot that proves Bitcoin address ownership and DATUM Gateway share submission.",

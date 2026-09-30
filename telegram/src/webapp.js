@@ -1,4 +1,4 @@
-const DEFAULT_WEBAPP_URL = 'https://yudikorsou.github.io/datum-gateway-telegram-verify-bot/'
+const DEFAULT_WEBAPP_URL = 'https://yudikorsou.github.io/datum-gateway-verify-bot/'
 const VERIFY_APP_VERSION = 'bip322'
 const VERIFY_APP_LABEL = 'Open DATUM verification'
 

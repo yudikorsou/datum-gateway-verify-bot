@@ -10,8 +10,8 @@ import {
 
 test('form URLs open the matching paste field', () => {
   assert.equal(
-    addressFormUrl('https://yudikorsou.github.io/datum-gateway-telegram-verify-bot'),
-    'https://yudikorsou.github.io/datum-gateway-telegram-verify-bot/?v=bip322',
+    addressFormUrl('https://yudikorsou.github.io/datum-gateway-verify-bot'),
+    'https://yudikorsou.github.io/datum-gateway-verify-bot/?v=bip322',
   )
   const signed = signatureFormUrl('https://example.test/form', '4242')
   assert.equal(signed, 'https://example.test/form/?v=bip322&uid=4242')

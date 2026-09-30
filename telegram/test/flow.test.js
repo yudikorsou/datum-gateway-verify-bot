@@ -76,7 +76,7 @@ test('ownership is confirmed before the DATUM check, then access is granted', as
     chatId: '-100123456',
     shareMaxAgeHours: 24,
     convoyTreatActiveAsDatum: true,
-    webAppUrl: 'https://yudikorsou.github.io/datum-gateway-telegram-verify-bot/',
+    webAppUrl: 'https://yudikorsou.github.io/datum-gateway-verify-bot/',
   }
   const { privateKey, key, address } = wallet()
   const user = fakeCtx(4242)
@@ -272,7 +272,7 @@ test('a group Verify tap sends the address template privately', async () => {
   const api = apiStub(ctx.sent)
   await onStart(ctx, {
     db,
-    config: { challengeMinutes: 30, chatId: '-100', webAppUrl: 'https://yudikorsou.github.io/datum-gateway-telegram-verify-bot/' },
+    config: { challengeMinutes: 30, chatId: '-100', webAppUrl: 'https://yudikorsou.github.io/datum-gateway-verify-bot/' },
     api,
   })
   const form = ctx.sent.find((row) => row.text?.includes('DATUM Gateway verification'))
