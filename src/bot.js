@@ -92,6 +92,17 @@ function roleHas(role, bit) {
   return (BigInt(role.permissions) & bit) === bit
 }
 
+const LOCKED_CHANNEL_OVERWRITES = new Set(['gateway', 'mods'])
+
+export function shouldSkipChannelOverwrite(channel) {
+  if (channel.type !== 0 && channel.type !== 5) return true
+  return LOCKED_CHANNEL_OVERWRITES.has(String(channel.name || '').toLowerCase())
+}
+
+function overwriteErrorText(error) {
+  return error?.rawError?.message || error?.message || String(error)
+}
+
 export async function ensureGuildPermissions(config) {
   const rest = new REST({ version: '10' }).setToken(config.token)
   const roles = await rest.get(Routes.guildRoles(config.guildId))
@@ -105,7 +116,7 @@ export async function ensureGuildPermissions(config) {
   const capableRole = botRoles.find((role) => roleHas(role, SEND_MESSAGES) && roleHas(role, USE_APPLICATION_COMMANDS))
   if (highestBotRole && capableRole && highestBotRole.id !== capableRole.id) {
     console.error(
-      `Move the "${capableRole.name}" role above "${highestBotRole.name}" in Server Settings → Roles, then restart. The higher role only has Manage Roles, so #gateway still blocks the bot.`,
+      `Move the "${capableRole.name}" role above "${highestBotRole.name}" in Server Settings → Roles, then restart. The higher role needs Send Messages so it can grant the miner role.`,
     )
   }
   const everyonePerms = BigInt(everyone.permissions)
@@ -120,16 +131,16 @@ export async function ensureGuildPermissions(config) {
   const channels = await rest.get(Routes.guildChannels(config.guildId))
   const allow = String(VIEW_CHANNEL | SEND_MESSAGES | EMBED_LINKS | READ_MESSAGE_HISTORY | USE_APPLICATION_COMMANDS)
   for (const channel of channels) {
-    if (channel.type !== 0 && channel.type !== 5) continue
-    if (channel.name === 'mods') continue
+    if (shouldSkipChannelOverwrite(channel)) continue
     try {
       await rest.put(`/channels/${channel.id}/permissions/${overwriteRole.id}`, {
         body: { type: 0, allow, deny: '0' },
       })
     } catch (error) {
-      console.error(`could not update #${channel.name} permissions`, error)
+      console.error(`could not update #${channel.name} permissions: ${overwriteErrorText(error)}`)
     }
   }
+  console.log('locked channels such as #gateway keep their overwrites; /verify stays ephemeral there')
 }
 
 function inAllowedPlace(interaction, config) {
