@@ -331,6 +331,11 @@ const PAGE = `<!DOCTYPE html>
       border: 1px dashed var(--line);
       font-weight: 600;
     }
+    .build {
+      margin-top: 18px;
+      color: var(--muted);
+      font-size: 12px;
+    }
     button {
       appearance: none;
       border: 0;
@@ -423,14 +428,19 @@ const PAGE = `<!DOCTYPE html>
           <button type="button" class="secondary" id="refresh">Refresh status</button>
         </div>
         <p class="flash" id="flash">Saved. The selected bots will start or reload now.</p>
+        <p class="build" id="buildStamp">DATUMVerified settings · keep-form-2</p>
       </section>
     </form>
   </main>
   <script>
+    const BUILD = 'keep-form-2'
     const fields = [
       'DISCORD_TOKEN','DISCORD_CLIENT_ID',
       'TELEGRAM_BOT_TOKEN','WEBAPP_URL','SCAN_INTERVAL_HOURS','SHARE_MAX_AGE_HOURS'
     ]
+    let formDirty = false
+    document.getElementById('form').addEventListener('input', () => { formDirty = true })
+    document.getElementById('form').addEventListener('change', () => { formDirty = true })
     function discordRow(entry = { guildId: '', roleId: '' }) {
       const row = document.createElement('div')
       row.className = 'community-row'
@@ -446,6 +456,7 @@ const PAGE = `<!DOCTYPE html>
         <button type="button" class="remove">Remove</button>
       \`
       row.querySelector('.remove').addEventListener('click', () => {
+        formDirty = true
         const list = document.getElementById('discordCommunities')
         if (list.children.length <= 1) {
           row.querySelector('.guild-id').value = ''
@@ -467,6 +478,7 @@ const PAGE = `<!DOCTYPE html>
         <button type="button" class="remove">Remove</button>
       \`
       row.querySelector('.remove').addEventListener('click', () => {
+        formDirty = true
         const list = document.getElementById('telegramCommunities')
         if (list.children.length <= 1) {
           row.querySelector('.chat-id').value = ''
@@ -497,7 +509,25 @@ const PAGE = `<!DOCTYPE html>
     function collectTelegramChatIds() {
       return [...document.querySelectorAll('#telegramCommunities .chat-id')].map((input) => input.value.trim())
     }
-    async function updateStatus(data) {
+    function applyForm(settings) {
+      document.getElementById('DISCORD_ENABLED').checked = settings.DISCORD_ENABLED === '1'
+      document.getElementById('TELEGRAM_ENABLED').checked = settings.TELEGRAM_ENABLED === '1'
+      document.getElementById('CONVOY_TREAT_ACTIVE_AS_DATUM').checked = settings.CONVOY_TREAT_ACTIVE_AS_DATUM !== 'false'
+      for (const key of fields) {
+        const el = document.getElementById(key)
+        if (key === 'DISCORD_TOKEN' || key === 'TELEGRAM_BOT_TOKEN') {
+          el.value = ''
+          const empty = el.getAttribute('data-empty-placeholder') || el.placeholder
+          if (!el.getAttribute('data-empty-placeholder')) el.setAttribute('data-empty-placeholder', empty)
+          el.placeholder = settings[key] ? 'Saved — paste a new token to replace it' : empty
+        } else {
+          el.value = settings[key] || ''
+        }
+      }
+      renderCommunities(settings)
+      formDirty = false
+    }
+    function applyStatus(data) {
       const discord = document.getElementById('discordStatus')
       const guildCount = (data.settings.discordCommunities || []).filter((entry) => entry.guildId && entry.roleId).length
       discord.textContent = data.discord.detail + (guildCount ? \` · \${guildCount} server\${guildCount === 1 ? '' : 's'}\` : '')
@@ -510,32 +540,25 @@ const PAGE = `<!DOCTYPE html>
       invite.innerHTML = data.settings.discordInviteUrl
         ? '<a href="' + data.settings.discordInviteUrl + '" target="_blank" rel="noreferrer">Open Discord invite link</a>'
         : ''
+      document.getElementById('buildStamp').textContent = 'DATUMVerified settings · ' + BUILD
     }
-    async function load(options = { form: true }) {
-      const response = await fetch('/api/status')
+    async function refreshStatus() {
+      const response = await fetch('/api/status', { cache: 'no-store' })
       const data = await response.json()
-      if (options.form) {
-        document.getElementById('DISCORD_ENABLED').checked = data.settings.DISCORD_ENABLED === '1'
-        document.getElementById('TELEGRAM_ENABLED').checked = data.settings.TELEGRAM_ENABLED === '1'
-        document.getElementById('CONVOY_TREAT_ACTIVE_AS_DATUM').checked = data.settings.CONVOY_TREAT_ACTIVE_AS_DATUM !== 'false'
-        for (const key of fields) {
-          const el = document.getElementById(key)
-          if (key === 'DISCORD_TOKEN' || key === 'TELEGRAM_BOT_TOKEN') {
-            el.value = ''
-            el.placeholder = data.settings[key] ? 'Saved — paste a new token to replace it' : el.getAttribute('data-empty-placeholder') || el.placeholder
-            if (!el.getAttribute('data-empty-placeholder')) el.setAttribute('data-empty-placeholder', el.placeholder)
-          } else {
-            el.value = data.settings[key] || ''
-          }
-        }
-        renderCommunities(data.settings)
-      }
-      await updateStatus(data)
+      applyStatus(data)
+      return data
+    }
+    async function loadForm() {
+      const data = await refreshStatus()
+      applyForm(data.settings)
+      return data
     }
     document.getElementById('addDiscordCommunity').addEventListener('click', () => {
+      formDirty = true
       document.getElementById('discordCommunities').appendChild(discordRow())
     })
     document.getElementById('addTelegramCommunity').addEventListener('click', () => {
+      formDirty = true
       document.getElementById('telegramCommunities').appendChild(telegramRow())
     })
     document.getElementById('form').addEventListener('submit', async (event) => {
@@ -552,6 +575,7 @@ const PAGE = `<!DOCTYPE html>
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(body),
+        cache: 'no-store',
       })
       if (!response.ok) {
         alert('Could not save settings')
@@ -559,11 +583,14 @@ const PAGE = `<!DOCTYPE html>
       }
       const flash = document.getElementById('flash')
       flash.style.display = 'block'
-      setTimeout(() => load({ form: true }), 1500)
+      formDirty = false
+      setTimeout(() => { loadForm().catch(console.error) }, 800)
     })
-    document.getElementById('refresh').addEventListener('click', () => load({ form: false }))
-    load({ form: true })
-    setInterval(() => load({ form: false }), 15000)
+    document.getElementById('refresh').addEventListener('click', () => {
+      refreshStatus().catch(console.error)
+    })
+    loadForm().catch(console.error)
+    setInterval(() => { refreshStatus().catch(() => {}) }, 20000)
   </script>
 </body>
 </html>
