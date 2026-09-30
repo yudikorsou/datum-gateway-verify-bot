@@ -7,26 +7,48 @@ import { inspectAddress } from './address.js'
 initEccLib(ecc)
 
 const BASE64 = /^[A-Za-z0-9+/]+={0,2}$/
+const HEX = /^(?:[0-9a-fA-F]{2})+$/
 
-const ADDRESS_LINE = /^(bc1|[13]|tb1|2)/i
+function isIgnorableLine(line) {
+  if (!line) return true
+  if (line.startsWith('-----')) return true
+  return inspectAddress(line).ok
+}
 
-export function extractSignature(input) {
+function isSignatureBlob(value) {
+  return value.length >= 20 && (BASE64.test(value) || HEX.test(value))
+}
+
+export function signatureCandidates(input) {
   const text = String(input ?? '').trim()
-  if (!text) return null
+  if (!text) return []
   const armored = text.match(/-----BEGIN SIGNATURE-----([\s\S]*?)-----END/i)
   const body = armored ? armored[1] : text
   const lines = body.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
   const chunks = lines
-    .filter((line) => !ADDRESS_LINE.test(line) && !line.startsWith('-----'))
+    .filter((line) => !isIgnorableLine(line))
     .map((line) => line.replace(/\s+/g, ''))
-    .filter((line) => line.length >= 20 && BASE64.test(line))
+    .filter(isSignatureBlob)
+  const out = []
   if (chunks.length) {
     const joined = chunks.join('')
-    if (joined.length >= 20 && BASE64.test(joined)) return joined
+    if (isSignatureBlob(joined)) out.push(joined)
   }
   const compact = body.replace(/\s+/g, '')
-  if (compact.length >= 20 && BASE64.test(compact) && !ADDRESS_LINE.test(compact)) return compact
-  return null
+  if (isSignatureBlob(compact) && !inspectAddress(compact).ok) out.push(compact)
+  return [...new Set(out)]
+}
+
+export function extractSignature(input) {
+  return signatureCandidates(input)[0] || null
+}
+
+function encodingsOf(signature) {
+  const values = [signature]
+  if (HEX.test(signature) && signature.length >= 64 && signature.length % 2 === 0) {
+    values.push(Buffer.from(signature, 'hex').toString('base64'))
+  }
+  return [...new Set(values)]
 }
 
 function messageVariants(message) {
@@ -55,24 +77,28 @@ function verifyBip322(address, message, signature) {
 export function verifyOwnership(address, message, signatureText) {
   const info = inspectAddress(address)
   if (!info.ok) return { ok: false, reason: info.error }
-  const signature = extractSignature(signatureText)
-  if (!signature) {
+  const candidates = signatureCandidates(signatureText)
+  if (!candidates.length) {
     return {
       ok: false,
-      reason: 'Paste the signature from your wallet. A raw base64 signature or a full “Bitcoin Signed Message” block both work.',
+      reason: 'Paste the signature from your wallet. A raw base64 signature or a full “Bitcoin Signed Message” block both work. Taproot (bc1p…) needs BIP322.',
     }
   }
 
-  for (const variant of messageVariants(message)) {
-    if (info.type !== 'p2tr' && verifyBitcoinMessage(variant, info.canonical, signature)) {
-      return { ok: true, method: 'bitcoin-message', address: info.canonical }
-    }
-    if (verifyBip322(info.canonical, variant, signature)) {
-      return { ok: true, method: 'bip322', address: info.canonical }
+  for (const candidate of candidates) {
+    for (const signature of encodingsOf(candidate)) {
+      for (const variant of messageVariants(message)) {
+        if (info.type !== 'p2tr' && verifyBitcoinMessage(variant, info.canonical, signature)) {
+          return { ok: true, method: 'bitcoin-message', address: info.canonical }
+        }
+        if (verifyBip322(info.canonical, variant, signature)) {
+          return { ok: true, method: 'bip322', address: info.canonical }
+        }
+      }
     }
   }
   return {
     ok: false,
-    reason: 'That signature does not match this address and message. Sign the exact text, in a wallet that can spend the address, and paste the result again.',
+    reason: 'That signature does not match this address and message. Sign the exact text, in a wallet that can spend the address, and paste the result again. Taproot (bc1p…) needs BIP322 (Simple).',
   }
 }

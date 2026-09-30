@@ -65,7 +65,7 @@ The bot replies ephemerally, so the signature is not posted in the channel.
    - Shrike or Sparrow: **Tools → Sign/Verify Message**
    - Bitcoin Core: `signmessage "<address>" "<message>"`
    - Electrum: **Tools → Sign/Verify message**
-   - Taproot (`bc1p…`) needs BIP322. Legacy and SegWit can use the classic Bitcoin signed message. A full signed-message block is accepted as well as the raw base64 signature.
+   - Taproot (`bc1p…`) needs BIP322 (Simple). Wrapped lines, a signed-message block, or hex are accepted. Legacy and SegWit can use the classic Bitcoin signed message. A full signed-message block is accepted as well as the raw base64 signature.
 3. Submit the signature. The bot checks the signature, then queries the pools above.
 4. If both checks pass, it assigns `VERIFIED_ROLE_ID`.
 5. If the role is removed, or someone is kicked and later rejoins, `/verify` shows **Restore role**, **Sign again**, and **Add another wallet**. **Restore role** scans the coupled address on the DATUM Gateway pools and grants the role only if that address is still hashing through DATUM. Sign again issues a new Shrike message for that same wallet. Add another wallet replaces the linked address after the new one is signed and still has DATUM shares. An older signature does not match a new message.
