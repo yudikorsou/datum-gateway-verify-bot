@@ -231,7 +231,7 @@ const PAGE = `<!DOCTYPE html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>DATUMVerified</title>
+  <title>DATUM Verified</title>
   <style>
     :root {
       --bg: #0b0d12;
@@ -358,9 +358,9 @@ const PAGE = `<!DOCTYPE html>
 <body>
   <main>
     <header>
-      <div class="mark"><img src="/icon.png" alt="DATUMVerified"></div>
+      <div class="mark"><img src="/icon.png" alt="DATUM Verified"></div>
       <div>
-        <h1>DATUMVerified</h1>
+        <h1>DATUM Verified</h1>
         <p class="tagline">Run Discord and Telegram DATUM Gateway verify bots on this Umbrel.</p>
       </div>
     </header>
@@ -428,12 +428,12 @@ const PAGE = `<!DOCTYPE html>
           <button type="button" class="secondary" id="refresh">Refresh status</button>
         </div>
         <p class="flash" id="flash">Saved. The selected bots will start or reload now.</p>
-        <p class="build" id="buildStamp">DATUMVerified settings · keep-form-2</p>
+        <p class="build" id="buildStamp">DATUM Verified settings · keep-form-3</p>
       </section>
     </form>
   </main>
   <script>
-    const BUILD = 'keep-form-2'
+    const BUILD = 'keep-form-3'
     const fields = [
       'DISCORD_TOKEN','DISCORD_CLIENT_ID',
       'TELEGRAM_BOT_TOKEN','WEBAPP_URL','SCAN_INTERVAL_HOURS','SHARE_MAX_AGE_HOURS'
@@ -540,7 +540,7 @@ const PAGE = `<!DOCTYPE html>
       invite.innerHTML = data.settings.discordInviteUrl
         ? '<a href="' + data.settings.discordInviteUrl + '" target="_blank" rel="noreferrer">Open Discord invite link</a>'
         : ''
-      document.getElementById('buildStamp').textContent = 'DATUMVerified settings · ' + BUILD
+      document.getElementById('buildStamp').textContent = 'DATUM Verified settings · ' + BUILD
     }
     async function refreshStatus() {
       const response = await fetch('/api/status', { cache: 'no-store' })
@@ -637,5 +637,5 @@ const server = http.createServer(async (request, response) => {
 })
 
 server.listen(PORT, '0.0.0.0', () => {
-  console.log(`DATUMVerified settings listening on ${PORT}`)
+  console.log(`DATUM Verified settings listening on ${PORT}`)
 })
