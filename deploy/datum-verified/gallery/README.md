@@ -1,4 +1,4 @@
-# DATUMVerified gallery
+# DATUM Verified gallery
 
 Umbrel App Store gallery images are **1440×900** PNGs.
 

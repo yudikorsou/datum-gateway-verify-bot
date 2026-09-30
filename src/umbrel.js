@@ -44,7 +44,7 @@ export async function applyUmbrelSettings({
   exit = () => process.exit(0),
 } = {}) {
   if (!settingsFile) return
-  console.log(`DATUMVerified: waiting for ${platform} settings`)
+  console.log(`DATUM Verified: waiting for ${platform} settings`)
   while (true) {
     try {
       if (fs.existsSync(settingsFile)) {
@@ -52,25 +52,25 @@ export async function applyUmbrelSettings({
         if (settingsReady(process.env, platform)) break
       }
     } catch (error) {
-      console.error('DATUMVerified: could not read settings', error.message)
+      console.error('DATUM Verified: could not read settings', error.message)
     }
     await sleep(pollMs)
   }
-  console.log(`DATUMVerified: ${platform} settings loaded`)
+  console.log(`DATUM Verified: ${platform} settings loaded`)
   if (!watch) return
 
   let exiting = false
   const restart = () => {
     if (exiting) return
     exiting = true
-    console.log('DATUMVerified: settings changed, restarting')
+    console.log('DATUM Verified: settings changed, restarting')
     exit()
   }
 
   try {
     fs.watch(settingsFile, { persistent: false }, restart)
   } catch (error) {
-    console.error('DATUMVerified: could not watch settings', error.message)
+    console.error('DATUM Verified: could not watch settings', error.message)
   }
 
   let last = fs.statSync(settingsFile).mtimeMs

@@ -11,7 +11,7 @@ Anyone can run a copy on their own Discord server. The bot token, server id, and
 
 ## Run on Umbrel
 
-Install **DATUMVerified** from the Umbrel App Store, or add the community store `https://github.com/yudikorsou/datumverified-umbrel-app-store` under **App Store → Community App Stores**. Open the app, paste your Discord and/or Telegram bot tokens, and add every community you want to verify. The bots run 24/7 on that homeserver.
+Install **DATUM Verified** from the Umbrel App Store, or add the community store `https://github.com/yudikorsou/datumverified-umbrel-app-store` under **App Store → Community App Stores**. Open the app, paste your Discord and/or Telegram bot tokens, and add every community you want to verify. The bots run 24/7 on that homeserver.
 
 Portainer remains supported for the original stack: [deploy/umbrel/README.md](deploy/umbrel/README.md).
 

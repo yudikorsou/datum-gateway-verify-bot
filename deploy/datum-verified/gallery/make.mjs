@@ -128,7 +128,7 @@ function frameHtml(headline, shotDataUrl) {
       <span class="dot" style="background:#ff5f57"></span>
       <span class="dot" style="background:#febc2e"></span>
       <span class="dot" style="background:#28c840"></span>
-      <div class="url">umbrel.local · DATUMVerified</div>
+      <div class="url">umbrel.local · DATUM Verified</div>
     </div>
     <img class="screen" src="${shotDataUrl}" alt="">
   </div>
