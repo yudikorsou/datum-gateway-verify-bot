@@ -46,14 +46,6 @@ export function optionsRow({ restore = true, signAgain = true, newWallet = true 
   return new ActionRowBuilder().addComponents(...buttons)
 }
 
-export function restoreRow() {
-  return optionsRow()
-}
-
-export function linkedRow() {
-  return optionsRow()
-}
-
 export function signatureRow() {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()

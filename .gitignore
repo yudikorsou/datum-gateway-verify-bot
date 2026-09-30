@@ -3,5 +3,6 @@ node_modules/
 data/*.sqlite
 data/*.sqlite-*
 *.log
+assets/
 deploy/umbrel/.env
 deploy/umbrel/docker-compose.portainer.local.yml
