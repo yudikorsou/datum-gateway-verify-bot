@@ -61,7 +61,7 @@ The bot replies ephemerally, so the signature is not posted in the channel.
 ## Member flow
 
 1. Run `/verify` and enter the payout address. Do not include a `.worker` suffix.
-2. Sign the exact message in the copyable code block above the card (tap the copy icon, or long-press the block). Discord does not let you copy text from embeds. The explainer video is attached to that message, and the bot DMs another copyable copy when **Submit signature** opens (Shrike, Bitcoin Core, and Electrum).
+2. Sign the exact message. **Sign again** opens a popup you can select-all and copy. The bot also DMs a private message you can long-press → **Copy Text**. Use **Copy sign text** if you need the popup again. Discord does not let you copy text from embeds. The explainer video is attached after you copy, and again when **Submit signature** opens (Shrike, Bitcoin Core, and Electrum).
    - Shrike or Sparrow: **Tools → Sign/Verify Message**
    - Bitcoin Core: `signmessage "<address>" "<message>"`
    - Electrum: **Tools → Sign/Verify message**

@@ -3,6 +3,9 @@ import {
   ButtonBuilder,
   ButtonStyle,
   EmbedBuilder,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle,
 } from 'discord.js'
 
 export function startRow() {
@@ -54,16 +57,44 @@ export function linkedRow() {
 export function signatureRow() {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
+      .setCustomId('verify:copy-sign-text')
+      .setLabel('Copy sign text')
+      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
       .setCustomId('verify:open-signature')
       .setLabel('Submit signature')
-      .setStyle(ButtonStyle.Primary),
+      .setStyle(ButtonStyle.Success),
   )
+}
+
+export function copyableSignTextDm(message) {
+  return [
+    'Long-press this message → **Copy Text**, then paste it into Shrike.',
+    '```',
+    message,
+    '```',
+  ].join('\n')
+}
+
+export function copySignTextModal(message) {
+  return new ModalBuilder()
+    .setCustomId('verify:copy-sign-text-modal')
+    .setTitle('Copy this into Shrike')
+    .addComponents(new ActionRowBuilder().addComponents(
+      new TextInputBuilder()
+        .setCustomId('sign-text')
+        .setLabel('Select all, then copy')
+        .setStyle(TextInputStyle.Paragraph)
+        .setRequired(true)
+        .setMaxLength(4000)
+        .setValue(message),
+    ))
 }
 
 export function challengeContent(message, extra = '') {
   return [
     extra,
-    'Copy this exact text into your wallet — tap the copy icon on the block, or long-press it. Discord will not let you copy text from the card below.',
+    'Tap **Copy sign text** and select-all in the popup, or copy the private message the bot just sent. Discord will not let you copy text from the card below.',
     '```',
     message,
     '```',
@@ -78,7 +109,7 @@ export function challengeEmbed(info) {
       `Address: \`${info.canonical}\``,
       `Type: ${info.label}`,
       '',
-      'The sign text is in the copyable code block above this card. Watch the attached video, or the private copy the bot sends when you open **Submit signature**.',
+      'Copy the sign text from **Copy sign text**, from the bot’s private message, or from the code block above this card. Watch the attached video, then use **Submit signature**.',
       '',
       '**Shrike** (same screen as Sparrow): Tools → Sign/Verify Message. Paste the copied text, choose this address, and click **Sign**. **Verify** only checks a signature you already created. An older signature does not match this text. Then use **Submit signature**.',
       '**Bitcoin Core:** `signmessage "<address>" "<message>"`',

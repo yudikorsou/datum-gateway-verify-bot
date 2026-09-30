@@ -21,7 +21,7 @@ import {
   saveChallenge,
   saveMiner,
 } from './db.js'
-import { challengeContent, challengeEmbed, optionsRow, restoreResultEmbed, resultEmbed, signatureRow, startRow, statusEmbed } from './present.js'
+import { challengeContent, challengeEmbed, copySignTextModal, copyableSignTextDm, optionsRow, restoreResultEmbed, resultEmbed, signatureRow, startRow, statusEmbed } from './present.js'
 import { loadSharedSnapshots, scanAddress, summarizeScan } from './pools/scan.js'
 import { grantRole, isUnknownMember, memberRoleState, revokeRole, roleErrorText } from './roles.js'
 import { explainerFiles } from './explainer.js'
@@ -251,15 +251,21 @@ function challengeReply(info, message, extra) {
   }
 }
 
+async function sendCopyableSignText(user, message) {
+  try {
+    await user.send({ content: copyableSignTextDm(message) })
+  } catch (error) {
+    console.error('copyable sign text DM failed', error)
+  }
+}
+
 async function sendSignatureHelp(interaction, db) {
   const challenge = getChallenge(db, interaction.user.id)
   const info = challenge ? inspectAddress(challenge.address) : null
+  if (challenge) await sendCopyableSignText(interaction.user, challenge.message)
   const payload = {
     content: challenge
-      ? challengeContent(
-        challenge.message,
-        'The sign popup is open. Watch the video, then paste the signature in the popup. An older signature will not match.',
-      )
+      ? 'The sign popup is open. Copy the private message above, sign it in Shrike, then paste the signature in the popup. An older signature will not match.'
       : 'Watch the video, then paste your signature in the popup.',
     embeds: info?.ok ? [challengeEmbed(info)] : [],
     files: explainerFiles(),
@@ -308,12 +314,14 @@ export function createInteractionHandler({ client, db, config }) {
           await interaction.showModal(signatureModal())
           await sendSignatureHelp(interaction, db)
         }
+        else if (interaction.customId === 'verify:copy-sign-text') await onCopySignText(interaction, db)
         else if (interaction.customId === 'verify:sign-again') await onSignAgain(interaction, db, config)
         else if (interaction.customId === 'verify:restore') await onRestore(interaction, client, db, config)
         return
       }
       if (interaction.isModalSubmit()) {
         if (interaction.customId === 'verify:address-modal') await onAddressModal(interaction, client, db, config)
+        else if (interaction.customId === 'verify:copy-sign-text-modal') await onCopySignTextModal(interaction, db)
         else if (interaction.customId === 'verify:signature-modal') await onSignatureModal(interaction, client, db, config)
       }
     } catch (error) {
@@ -325,21 +333,28 @@ export function createInteractionHandler({ client, db, config }) {
   }
 }
 
+function challengeFollowUp(info, message, extra, miner) {
+  const switching = miner && miner.address !== info.canonical
+  return challengeReply(
+    info,
+    message,
+    extra || (switching
+      ? `This will replace \`${miner.address}\` after you sign. An older signature will not match. Use **Sign again** to stay on the linked wallet, or **Restore role** for that wallet.`
+      : 'Sign this new message in Shrike. An older signature will not match. If you already proved this address, use **Restore role** instead of Submit signature.'),
+  )
+}
+
 async function replyWithChallenge(interaction, db, config, info) {
   const started = beginChallenge(db, config, interaction.user.id, info)
   if (started.error) {
     await respondPrivately(interaction, started.error)
     return
   }
-  const miner = getMiner(db, interaction.user.id)
-  const switching = miner && miner.address !== info.canonical
-  await respondPrivately(interaction, challengeReply(
-    started.info,
-    started.message,
-    switching
-      ? `This will replace \`${miner.address}\` after you sign. An older signature will not match. Use **Sign again** to stay on the linked wallet, or **Restore role** for that wallet.`
-      : 'Sign this new message in Shrike. An older signature will not match. If you already proved this address, use **Restore role** instead of Submit signature.',
-  ))
+  await sendCopyableSignText(interaction.user, started.message)
+  await respondPrivately(
+    interaction,
+    challengeFollowUp(started.info, started.message, '', getMiner(db, interaction.user.id)),
+  )
 }
 
 async function continueAfterAddress(interaction, client, db, config, info) {
@@ -385,6 +400,7 @@ async function onVerify(interaction, client, db, config) {
   }
   if (step === 'resume-challenge') {
     const info = inspectAddress(challenge.address)
+    await sendCopyableSignText(interaction.user, challenge.message)
     await respondPrivately(interaction, challengeReply(
       info,
       challenge.message,
@@ -404,6 +420,38 @@ async function onAddressModal(interaction, client, db, config) {
   await continueAfterAddress(interaction, client, db, config, info)
 }
 
+async function onCopySignText(interaction, db) {
+  const challenge = getChallenge(db, interaction.user.id)
+  if (!challenge || challenge.expiresAt <= Date.now()) {
+    await respondPrivately(interaction, 'That challenge expired. Use **Sign again** so the signed message is fresh.')
+    return
+  }
+  await interaction.showModal(copySignTextModal(challenge.message))
+  await sendCopyableSignText(interaction.user, challenge.message)
+}
+
+async function onCopySignTextModal(interaction, db) {
+  const challenge = getChallenge(db, interaction.user.id)
+  if (!challenge || challenge.expiresAt <= Date.now()) {
+    await respondPrivately(interaction, 'That challenge expired. Use **Sign again** so the signed message is fresh.')
+    return
+  }
+  const info = inspectAddress(challenge.address)
+  if (!info.ok) {
+    await respondPrivately(interaction, info.error)
+    return
+  }
+  await respondPrivately(
+    interaction,
+    challengeFollowUp(
+      info,
+      challenge.message,
+      'Paste the copied text into Shrike, sign it, then use **Submit signature**.',
+      getMiner(db, interaction.user.id),
+    ),
+  )
+}
+
 async function onSignAgain(interaction, db, config) {
   const address = linkedAddress(getMiner(db, interaction.user.id), getChallenge(db, interaction.user.id))
   if (!address) {
@@ -415,7 +463,13 @@ async function onSignAgain(interaction, db, config) {
     await respondPrivately(interaction, info.error)
     return
   }
-  await replyWithChallenge(interaction, db, config, info)
+  const started = beginChallenge(db, config, interaction.user.id, info)
+  if (started.error) {
+    await respondPrivately(interaction, started.error)
+    return
+  }
+  await interaction.showModal(copySignTextModal(started.message))
+  await sendCopyableSignText(interaction.user, started.message)
 }
 
 async function onRestore(interaction, client, db, config) {
