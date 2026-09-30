@@ -7,7 +7,7 @@ services:
       APP_PORT: 8080
 
   web:
-    image: ghcr.io/yudikorsou/datum-verified:1.0.0@sha256:WEB_DIGEST_PLACEHOLDER
+    image: ghcr.io/yudikorsou/datum-verified:1.0.0@sha256:60ce7d069bba666862a107284684b8957199816cd08dfc51414753d6b23b2729
     user: "1000:1000"
     restart: on-failure
     stop_grace_period: 1m
@@ -19,7 +19,7 @@ services:
       - ${APP_DATA_DIR}/data:/data
 
   discord:
-    image: ghcr.io/yudikorsou/datum-gateway-verify-bot:DISCORD_TAG_PLACEHOLDER@sha256:DISCORD_DIGEST_PLACEHOLDER
+    image: ghcr.io/yudikorsou/datum-gateway-verify-bot:cd21dee4c86caa696c4f394f294877dbd57a3086@sha256:a19531262ee42c3f658f4fa98380ca471726a96b65574a3f69a7a2ccf6cc6893
     restart: on-failure
     stop_grace_period: 1m
     init: true
@@ -30,7 +30,7 @@ services:
       - ${APP_DATA_DIR}/data:/data
 
   telegram:
-    image: ghcr.io/yudikorsou/datum-gateway-telegram-verify-bot:TELEGRAM_TAG_PLACEHOLDER@sha256:TELEGRAM_DIGEST_PLACEHOLDER
+    image: ghcr.io/yudikorsou/datum-gateway-telegram-verify-bot:ffd3f27e3f1feea24fdf0a015fd01917ad6f1939@sha256:326272f91421fea30bc33cf835d0d12baf5571a9e93f6a0d4af12530c9d7058e
     restart: on-failure
     stop_grace_period: 1m
     init: true
