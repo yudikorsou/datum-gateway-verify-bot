@@ -1,0 +1,41 @@
+version: "3.7"
+
+services:
+  app_proxy:
+    environment:
+      APP_HOST: datum-verified_web_1
+      APP_PORT: 8080
+
+  web:
+    image: ghcr.io/yudikorsou/datum-verified:1.0.0@sha256:WEB_DIGEST_PLACEHOLDER
+    user: "1000:1000"
+    restart: on-failure
+    stop_grace_period: 1m
+    init: true
+    environment:
+      PORT: 8080
+      DATA_DIR: /data
+    volumes:
+      - ${APP_DATA_DIR}/data:/data
+
+  discord:
+    image: ghcr.io/yudikorsou/datum-gateway-verify-bot:DISCORD_TAG_PLACEHOLDER@sha256:DISCORD_DIGEST_PLACEHOLDER
+    restart: on-failure
+    stop_grace_period: 1m
+    init: true
+    environment:
+      SETTINGS_FILE: /data/settings.json
+      DATABASE_PATH: /data/discord/bot.sqlite
+    volumes:
+      - ${APP_DATA_DIR}/data:/data
+
+  telegram:
+    image: ghcr.io/yudikorsou/datum-gateway-telegram-verify-bot:TELEGRAM_TAG_PLACEHOLDER@sha256:TELEGRAM_DIGEST_PLACEHOLDER
+    restart: on-failure
+    stop_grace_period: 1m
+    init: true
+    environment:
+      SETTINGS_FILE: /data/settings.json
+      DATABASE_PATH: /data/telegram/bot.sqlite
+    volumes:
+      - ${APP_DATA_DIR}/data:/data

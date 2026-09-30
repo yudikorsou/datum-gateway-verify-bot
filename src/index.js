@@ -2,7 +2,9 @@ import { Client, GatewayIntentBits } from 'discord.js'
 import { botInviteUrl, createInteractionHandler, ensureGuildPermissions, registerCommands, rescanMiners } from './bot.js'
 import { readConfig } from './config.js'
 import { openDatabase } from './db.js'
+import { applyUmbrelSettings } from './umbrel.js'
 
+await applyUmbrelSettings({ platform: 'discord' })
 const config = readConfig()
 const db = openDatabase(config.databasePath)
 const client = new Client({ intents: [GatewayIntentBits.Guilds] })

@@ -1,5 +1,7 @@
 # Run the DATUM Gateway bots 24/7 on Umbrel with Portainer
 
+The one-click app is **DATUMVerified**. Add `https://github.com/yudikorsou/datumverified-umbrel-app-store` in **App Store → Community App Stores**, or wait for it in the official Umbrel App Store. Use this Portainer guide only if you want the older stacked deploy.
+
 Umbrel’s Portainer app has its own Docker engine. Stacks you create there keep running after an Umbrel reboot **as long as Portainer stays installed**. Use named volumes only. Bind mounts are wiped when Portainer updates.
 
 Portainer’s nested Docker often cannot resolve public hostnames (`getaddrinfo EAI_AGAIN discord.com`). The Portainer compose file uses `network_mode: host` so the bots share Umbrel’s working DNS instead of the broken container resolver. Do not put the bots back on the default bridge unless DNS is fixed.

@@ -9,6 +9,12 @@ Every 24 hours the bot checks again. The role stays while a pool still shows fre
 
 Anyone can run a copy on their own Discord server. The bot token, server id, and role id stay in a local `.env` file and are never committed.
 
+## Run on Umbrel
+
+Install **DATUMVerified** from the Umbrel App Store, or add the community store `https://github.com/yudikorsou/datumverified-umbrel-app-store` under **App Store → Community App Stores**. Open the app, paste your Discord and/or Telegram bot tokens, and the bots run 24/7 on that homeserver.
+
+Portainer remains supported for the original stack: [deploy/umbrel/README.md](deploy/umbrel/README.md).
+
 ```bash
 git clone https://github.com/yudikorsou/datum-gateway-verify-bot.git
 cd datum-gateway-verify-bot
@@ -17,10 +23,6 @@ cp .env.example .env
 npm test
 npm start
 ```
-
-## Run 24/7 on Umbrel
-
-Install **Portainer** from the Umbrel App Store and deploy [deploy/umbrel/docker-compose.portainer.yml](deploy/umbrel/docker-compose.portainer.yml). Full steps: [deploy/umbrel/README.md](deploy/umbrel/README.md).
 
 ## What the pools actually publish
 
